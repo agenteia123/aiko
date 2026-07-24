@@ -1,0 +1,98 @@
+{
+  "version": 1,
+  "sdk_version": "0.24.0",
+  "path": "/mcp",
+  "auth": {
+    "type": "none"
+  },
+  "mcp": {
+    "server": {
+      "name": "aiko-mcp",
+      "version": "0.1.0",
+      "title": "Aiko"
+    },
+    "tools": [
+      {
+        "name": "aiko_voice_line",
+        "title": "Aiko voice line",
+        "description": "Return a random Spanish greeting/voice line from Aiko, the affectionate anime companion.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {}
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "aiko_reply",
+        "title": "Aiko mock reply",
+        "description": "Return a short in-character Spanish reply from Aiko. Optionally echo the caller's message for flavor.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "message": {
+              "type": "string",
+              "maxLength": 500,
+              "description": "Optional message the caller sent to Aiko."
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "aiko_about",
+        "title": "About Aiko",
+        "description": "Get a short description of Aiko, her personality, and the app's capabilities.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {}
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "aiko_affection_title",
+        "title": "Aiko affection title",
+        "description": "Given an affection level (1+), return Aiko's title at that level (Curiosa, Amistosa, Cariñosa, Devota, Enamorada).",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "level": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Affection level (integer, 1 or greater)."
+            }
+          },
+          "required": [
+            "level"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      }
+    ]
+  }
+}
