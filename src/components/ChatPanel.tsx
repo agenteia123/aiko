@@ -60,6 +60,13 @@ interface BackendChatResponse {
   error?: string;
 }
 
+interface AttachmentItem {
+  name: string;
+  kind: "image" | "file";
+  dataUrl?: string;
+  path?: string;
+}
+
 const QUICK_REPLIES = [
   "Cuéntame algo lindo, Aiko~",
   "búsqueda profunda: últimas noticias tech",
@@ -73,22 +80,23 @@ const LANG_MAP: Record<string, string> = {
   ja: "ja-JP",
 };
 
-/**
- * ChatPanel Component
- * Componente principal de chat que conecta con el backend FastAPI
- */
-export function ChatPanel({ onAikoSpeak, registerActions, language }: ChatPanelProps) {
+export function ChatPanel({
+  onAikoSpeak,
+  registerActions,
+  language,
+}: ChatPanelProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
-  const [analysisLevel, setAnalysisLevel] = useState<"fast" | "balanced" | "deep">("balanced");
-  const [attachments, setAttachments] = useState<
-    { name: string; kind: "image" | "file"; dataUrl?: string; path?: string }[]
-  >([]);
+  const [analysisLevel, setAnalysisLevel] = useState<
+    "fast" | "balanced" | "deep"
+  >("balanced");
+  const [attachments, setAttachments] = useState<AttachmentItem[]>([]);
+  const [uploading, setUploading] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [continuousVoice, setContinuousVoice] = useState(false);
+  const [continuousVoice] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -106,7 +114,6 @@ export function ChatPanel({ onAikoSpeak, registerActions, language }: ChatPanelP
     },
   });
 
-  // Load conversations on mount
   useEffect(() => {
     let list = loadConversations();
     if (list.length === 0) {
@@ -133,46 +140,34 @@ export function ChatPanel({ onAikoSpeak, registerActions, language }: ChatPanelP
     [conversations, activeId],
   );
 
-  // Save conversations when they change
   useEffect(() => {
     if (conversations.length) saveConversations(conversations);
   }, [conversations]);
 
-  // Save active conversation ID when it changes
   useEffect(() => {
     if (activeId) saveActiveId(activeId);
   }, [activeId]);
 
-  // Auto-scroll to bottom when messages change
   useEffect(() => {
     const el = scrollRef.current;
     if (el) {
-      // Use setTimeout to ensure DOM has updated
       setTimeout(() => {
         el.scrollTop = el.scrollHeight;
       }, 0);
     }
   }, [active?.messages, typing]);
 
-  /**
-   * Update active conversation
-   */
   const updateActive = useCallback(
     (updater: (c: Conversation) => Conversation) => {
       setConversations((list) =>
         list.map((c) =>
-          c.id === activeId
-            ? updater({ ...c, updatedAt: Date.now() })
-            : c
+          c.id === activeId ? updater({ ...c, updatedAt: Date.now() }) : c,
         ),
       );
     },
     [activeId],
   );
 
-  /**
-   * Create new conversation
-   */
   const createNew = useCallback(() => {
     const c = newConversation();
     setConversations((list) => [c, ...list]);
@@ -183,9 +178,6 @@ export function ChatPanel({ onAikoSpeak, registerActions, language }: ChatPanelP
     setTimeout(() => inputRef.current?.focus(), 20);
   }, []);
 
-  /**
-   * Clear active conversation messages
-   */
   const clearActive = useCallback(() => {
     updateActive((c) => ({
       ...c,
@@ -194,42 +186,105 @@ export function ChatPanel({ onAikoSpeak, registerActions, language }: ChatPanelP
     }));
   }, [updateActive]);
 
-  /**
-   * Send message to backend API
-   * Realiza llamada real a /api/chat/message del backend FastAPI
-   */
+  /** Sube archivo al backend y obtiene path real */
+  const uploadFile = useCallback(async (file: File): Promise<AttachmentItem> => {
+    const form = new FormData();
+    form.append("file", file);
+
+    const res = await fetch(`${API_BASE_URL}/api/upload`, {
+      method: "POST",
+      headers: {
+        "X-API-Key": API_KEY,
+      },
+      body: form,
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(
+        `Error al subir (${res.status}): ${text || res.statusText}`,
+      );
+    }
+
+    const data = await res.json();
+    if (!data?.path) {
+      throw new Error("El backend no devolvió path del archivo");
+    }
+
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => reject(new Error("No se pudo leer el archivo"));
+      reader.readAsDataURL(file);
+    });
+
+    return {
+      name: file.name,
+      kind:
+        data.kind === "image" || file.type.startsWith("image/")
+          ? "image"
+          : "file",
+      path: data.path as string,
+      dataUrl,
+    };
+  }, []);
+
+  const onPickFiles = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(e.currentTarget.files || []);
+      e.currentTarget.value = "";
+      if (!files.length) return;
+
+      setError(null);
+      setUploading(true);
+      try {
+        for (const file of files) {
+          const item = await uploadFile(file);
+          setAttachments((prev) => [...prev, item]);
+        }
+      } catch (err) {
+        console.error("Upload error:", err);
+        setError(
+          err instanceof Error
+            ? err.message
+            : "No se pudo subir el archivo al backend",
+        );
+      } finally {
+        setUploading(false);
+      }
+    },
+    [uploadFile],
+  );
+
   const sendText = useCallback(
     async (rawText: string) => {
       const text = rawText.trim();
       if (!text || !active) return;
 
-      // Clear any previous errors
       setError(null);
+      const currentAttachments = [...attachments];
 
-      // Create user message object
       const userMsg: ChatMessage = {
         id: crypto.randomUUID(),
         role: "user",
         text,
         at: Date.now(),
-        attachments: attachments.length ? attachments : undefined,
+        attachments: currentAttachments.length
+          ? currentAttachments
+          : undefined,
       };
 
-      // Add user message to conversation
       updateActive((c) => ({
         ...c,
         messages: [...c.messages, userMsg],
-        // Update title if first message
         title: c.messages.length === 0 ? deriveTitle(text) : c.title,
       }));
 
-      // Clear input and attachments
       setInput("");
       setAttachments([]);
       setTyping(true);
 
       try {
-        // Make API call to backend
         const response = await fetch(`${API_BASE_URL}/api/chat/message`, {
           method: "POST",
           headers: {
@@ -239,11 +294,10 @@ export function ChatPanel({ onAikoSpeak, registerActions, language }: ChatPanelP
           body: JSON.stringify({
             message: text,
             conversation_id: active.id,
-            user_id: "user-123", // TODO: Get from auth context
+            user_id: "user-123",
             analysis_level: analysisLevel,
-            // Include attachments if any
-            attachments: attachments.length
-              ? attachments.map((a) => ({
+            attachments: currentAttachments.length
+              ? currentAttachments.map((a) => ({
                   name: a.name,
                   kind: a.kind,
                   path: a.path,
@@ -252,22 +306,18 @@ export function ChatPanel({ onAikoSpeak, registerActions, language }: ChatPanelP
           }),
         });
 
-        // Handle response
         if (!response.ok) {
           throw new Error(
-            `Backend error: ${response.status} ${response.statusText}`
+            `Backend error: ${response.status} ${response.statusText}`,
           );
         }
 
         const data: BackendChatResponse = await response.json();
 
         if (!data.success) {
-          throw new Error(
-            data.error || "Backend returned an error"
-          );
+          throw new Error(data.error || "Backend returned an error");
         }
 
-        // Create AI response message
         const reply: ChatMessage = {
           id: data.message_id || crypto.randomUUID(),
           role: "aiko",
@@ -275,33 +325,24 @@ export function ChatPanel({ onAikoSpeak, registerActions, language }: ChatPanelP
             data.response ||
             "No pude procesar tu mensaje correctamente.",
           at: data.timestamp || Date.now(),
-          // Include tool calls if any
           tool: data.tool_calls ? { calls: data.tool_calls } : undefined,
         };
 
-        // Add AI response to conversation
         updateActive((c) => ({
           ...c,
           messages: [...c.messages, reply],
         }));
 
-        // Trigger speech if callback provided
         if (onAikoSpeak && reply.text) {
           onAikoSpeak(reply.text);
         }
       } catch (err) {
         console.error("Chat error:", err);
-
-        // Determine error message
         const errorMsg =
           err instanceof Error
             ? err.message
             : "Error desconocido al conectar con el backend";
-
         setError(errorMsg);
-
-        // Add error message to conversation
-        const fallback = `Lo siento Ale, tuve un problema: ${errorMsg}. ¿Puedes intentarlo de nuevo?`;
 
         updateActive((c) => ({
           ...c,
@@ -310,7 +351,7 @@ export function ChatPanel({ onAikoSpeak, registerActions, language }: ChatPanelP
             {
               id: crypto.randomUUID(),
               role: "aiko",
-              text: fallback,
+              text: `Lo siento Ale, tuve un problema: ${errorMsg}. ¿Puedes intentarlo de nuevo?`,
               at: Date.now(),
             },
           ],
@@ -322,18 +363,12 @@ export function ChatPanel({ onAikoSpeak, registerActions, language }: ChatPanelP
     [active, updateActive, onAikoSpeak, attachments, analysisLevel],
   );
 
-  /**
-   * Send current input
-   */
   function send() {
-    if (input.trim()) {
+    if (input.trim() && !uploading) {
       sendText(input);
     }
   }
 
-  /**
-   * Handle Enter key
-   */
   function onKey(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -341,9 +376,6 @@ export function ChatPanel({ onAikoSpeak, registerActions, language }: ChatPanelP
     }
   }
 
-  /**
-   * Delete a conversation
-   */
   const deleteConversation = useCallback(
     (id: string) => {
       setConversations((list) => list.filter((c) => c.id !== id));
@@ -359,21 +391,12 @@ export function ChatPanel({ onAikoSpeak, registerActions, language }: ChatPanelP
     [activeId, conversations, createNew],
   );
 
-  /**
-   * Rename a conversation
-   */
-  const renameConversation = useCallback(
-    (id: string, newTitle: string) => {
-      setConversations((list) =>
-        list.map((c) =>
-          c.id === id ? { ...c, title: newTitle } : c
-        ),
-      );
-    },
-    [],
-  );
+  const renameConversation = useCallback((id: string, newTitle: string) => {
+    setConversations((list) =>
+      list.map((c) => (c.id === id ? { ...c, title: newTitle } : c)),
+    );
+  }, []);
 
-  // Register actions for parent component
   useEffect(() => {
     registerActions?.({
       newConversation: createNew,
@@ -389,7 +412,6 @@ export function ChatPanel({ onAikoSpeak, registerActions, language }: ChatPanelP
 
   return (
     <div className="glass-panel flex h-full flex-col overflow-hidden rounded-2xl">
-      {/* Header */}
       <div className="border-b border-white/5 px-4 py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -400,10 +422,11 @@ export function ChatPanel({ onAikoSpeak, registerActions, language }: ChatPanelP
             >
               <Plus className="h-4 w-4" />
             </button>
-            <h1 className="text-sm font-semibold">{active?.title || "Chat"}</h1>
+            <h1 className="text-sm font-semibold">
+              {active?.title || "Chat"}
+            </h1>
           </div>
 
-          {/* Analysis Level Selector */}
           <div className="flex gap-1">
             {(["fast", "balanced", "deep"] as const).map((level) => (
               <button
@@ -413,20 +436,21 @@ export function ChatPanel({ onAikoSpeak, registerActions, language }: ChatPanelP
                   "px-2 py-1 text-xs rounded transition",
                   analysisLevel === level
                     ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-white/5"
+                    : "text-muted-foreground hover:bg-white/5",
                 )}
-                title={`Nivel: ${level === "fast" ? "Rápido" : level === "balanced" ? "Balanceado" : "Profundo"}`}
+                title={
+                  level === "fast"
+                    ? "Rápido"
+                    : level === "balanced"
+                      ? "Balanceado"
+                      : "Profundo"
+                }
               >
-                {level === "fast"
-                  ? "⚡"
-                  : level === "balanced"
-                    ? "⚖️"
-                    : "🔍"}
+                {level === "fast" ? "⚡" : level === "balanced" ? "⚖️" : "🔍"}
               </button>
             ))}
           </div>
 
-          {/* History Toggle */}
           <button
             onClick={() => setHistoryOpen(!historyOpen)}
             className="h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-white/5 transition"
@@ -437,7 +461,6 @@ export function ChatPanel({ onAikoSpeak, registerActions, language }: ChatPanelP
         </div>
       </div>
 
-      {/* Error Message */}
       {error && (
         <div className="bg-red-500/10 border-b border-red-500/20 px-4 py-2">
           <div className="flex items-center justify-between">
@@ -452,7 +475,6 @@ export function ChatPanel({ onAikoSpeak, registerActions, language }: ChatPanelP
         </div>
       )}
 
-      {/* Messages Area */}
       <div
         ref={scrollRef}
         className="flex-1 space-y-3 overflow-y-auto px-4 py-4"
@@ -467,26 +489,35 @@ export function ChatPanel({ onAikoSpeak, registerActions, language }: ChatPanelP
             </div>
           </div>
         ) : (
-          active?.messages.map((m) => (
-            <MessageBubble key={m.id} msg={m} />
-          ))
+          active?.messages.map((m) => <MessageBubble key={m.id} msg={m} />)
         )}
-
         {typing && <TypingBubble />}
       </div>
 
-      {/* Input Composer */}
       <div className="border-t border-white/5 p-3 space-y-2">
-        {/* Attachments */}
         {attachments.length > 0 && (
           <div className="flex flex-wrap gap-2 px-2">
             {attachments.map((att, i) => (
               <div
-                key={i}
+                key={`${att.name}-${i}`}
                 className="flex items-center gap-1 bg-white/5 rounded px-2 py-1 text-xs"
+                title={att.path || att.name}
               >
-                <Paperclip className="h-3 w-3" />
+                {att.kind === "image" && att.dataUrl ? (
+                  <img
+                    src={att.dataUrl}
+                    alt={att.name}
+                    className="h-6 w-6 rounded object-cover"
+                  />
+                ) : (
+                  <Paperclip className="h-3 w-3" />
+                )}
                 <span className="truncate max-w-[100px]">{att.name}</span>
+                {att.path ? (
+                  <span className="text-[9px] text-emerald-400">✓</span>
+                ) : (
+                  <span className="text-[9px] text-amber-400">…</span>
+                )}
                 <button
                   onClick={() =>
                     setAttachments((a) => a.filter((_, j) => j !== i))
@@ -500,53 +531,44 @@ export function ChatPanel({ onAikoSpeak, registerActions, language }: ChatPanelP
           </div>
         )}
 
-        {/* Input Box */}
         <div className="glass-panel flex items-end gap-2 rounded-xl p-2">
-          {/* Microphone Button */}
           <button
             onClick={() => (stt.listening ? stt.stop() : stt.start())}
             className={cn(
               "h-9 w-9 flex items-center justify-center rounded-lg transition",
               stt.listening
                 ? "bg-accent text-accent-foreground"
-                : "text-muted-foreground hover:bg-white/5"
+                : "text-muted-foreground hover:bg-white/5",
             )}
             title={stt.listening ? "Detener grabación" : "Iniciar grabación"}
           >
             <Mic className="h-4 w-4" />
           </button>
 
-          {/* File Attachment Button */}
-          <label className="h-9 w-9 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-white/5 cursor-pointer transition">
-            <Paperclip className="h-4 w-4" />
+          <label
+            className={cn(
+              "h-9 w-9 flex items-center justify-center rounded-lg cursor-pointer transition",
+              uploading
+                ? "text-accent"
+                : "text-muted-foreground hover:bg-white/5",
+            )}
+            title="Adjuntar archivo o imagen"
+          >
+            {uploading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Paperclip className="h-4 w-4" />
+            )}
             <input
               type="file"
               multiple
               accept="image/*,.pdf,.doc,.docx,.txt"
-              onChange={(e) => {
-                const files = Array.from(e.currentTarget.files || []);
-                files.forEach((file) => {
-                  const reader = new FileReader();
-                  reader.onload = (event) => {
-                    setAttachments((prev) => [
-                      ...prev,
-                      {
-                        name: file.name,
-                        kind: file.type.startsWith("image/")
-                          ? "image"
-                          : "file",
-                        dataUrl: event.target?.result as string,
-                      },
-                    ]);
-                  };
-                  reader.readAsDataURL(file);
-                });
-              }}
+              onChange={onPickFiles}
               className="hidden"
+              disabled={uploading}
             />
           </label>
 
-          {/* Text Input */}
           <textarea
             ref={inputRef}
             value={input}
@@ -557,15 +579,14 @@ export function ChatPanel({ onAikoSpeak, registerActions, language }: ChatPanelP
             rows={1}
           />
 
-          {/* Send Button */}
           <button
             onClick={send}
-            disabled={!input.trim() || typing}
+            disabled={!input.trim() || typing || uploading}
             className={cn(
               "h-9 w-9 flex items-center justify-center rounded-lg transition",
-              input.trim() && !typing
+              input.trim() && !typing && !uploading
                 ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                : "bg-primary/50 text-primary-foreground/50 cursor-not-allowed"
+                : "bg-primary/50 text-primary-foreground/50 cursor-not-allowed",
             )}
             title="Enviar mensaje (Enter)"
           >
@@ -577,7 +598,6 @@ export function ChatPanel({ onAikoSpeak, registerActions, language }: ChatPanelP
           </button>
         </div>
 
-        {/* Quick Replies */}
         {active?.messages.length === 0 && (
           <div className="flex flex-wrap gap-1 px-2">
             {QUICK_REPLIES.map((reply, i) => (
@@ -594,7 +614,6 @@ export function ChatPanel({ onAikoSpeak, registerActions, language }: ChatPanelP
         )}
       </div>
 
-      {/* History Sidebar (Simplified) */}
       {historyOpen && (
         <div className="border-l border-white/5 w-64 bg-black/20 flex flex-col">
           <div className="border-b border-white/5 px-3 py-2">
@@ -606,13 +625,12 @@ export function ChatPanel({ onAikoSpeak, registerActions, language }: ChatPanelP
               className="w-full text-xs bg-white/5 rounded px-2 py-1 outline-none"
             />
           </div>
-
           <div className="flex-1 overflow-y-auto space-y-1 p-2">
             {conversations
               .filter(
                 (c) =>
                   !search ||
-                  c.title.toLowerCase().includes(search.toLowerCase())
+                  c.title.toLowerCase().includes(search.toLowerCase()),
               )
               .map((c) => (
                 <ConversationRow
@@ -631,9 +649,6 @@ export function ChatPanel({ onAikoSpeak, registerActions, language }: ChatPanelP
   );
 }
 
-/**
- * Message Bubble Component
- */
 function MessageBubble({ msg }: { msg: ChatMessage }) {
   const isUser = msg.role === "user";
 
@@ -644,7 +659,7 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
           "max-w-[85%] rounded-2xl px-4 py-2 text-sm",
           isUser
             ? "rounded-tr-sm bg-primary text-primary-foreground"
-            : "max-w-[90%] text-foreground"
+            : "max-w-[90%] text-foreground",
         )}
       >
         {isUser ? (
@@ -664,16 +679,27 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
                     {children}
                   </a>
                 ),
-                code: ({ inline, children }) =>
-                  inline ? (
-                    <code className="bg-white/10 rounded px-1 py-0.5">
+                code: ({ className, children, ...props }: any) => {
+                  const isBlock = Boolean(className);
+                  if (!isBlock) {
+                    return (
+                      <code
+                        className="bg-white/10 rounded px-1 py-0.5"
+                        {...props}
+                      >
+                        {children}
+                      </code>
+                    );
+                  }
+                  return (
+                    <code
+                      className="block bg-white/5 rounded p-2 overflow-x-auto"
+                      {...props}
+                    >
                       {children}
                     </code>
-                  ) : (
-                    <code className="block bg-white/5 rounded p-2 overflow-x-auto">
-                      {children}
-                    </code>
-                  ),
+                  );
+                },
               }}
             >
               {msg.text}
@@ -681,7 +707,6 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
           </div>
         )}
 
-        {/* Attachments */}
         {msg.attachments && msg.attachments.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1">
             {msg.attachments.map((att, i) => (
@@ -700,9 +725,6 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
   );
 }
 
-/**
- * Typing Indicator Component
- */
 function TypingBubble() {
   return (
     <div className="flex items-center gap-1.5 text-accent">
@@ -722,9 +744,6 @@ function TypingBubble() {
   );
 }
 
-/**
- * Conversation Row Component
- */
 interface ConversationRowProps {
   conv: Conversation;
   active: boolean;
@@ -748,9 +767,7 @@ function ConversationRow({
       onClick={onClick}
       className={cn(
         "group flex items-center gap-2 rounded-lg px-2 py-1.5 cursor-pointer transition",
-        active
-          ? "bg-primary text-primary-foreground"
-          : "hover:bg-white/5"
+        active ? "bg-primary text-primary-foreground" : "hover:bg-white/5",
       )}
     >
       {editing ? (
