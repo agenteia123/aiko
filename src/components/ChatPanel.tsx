@@ -412,30 +412,30 @@ export function ChatPanel({
   }, [registerActions, createNew, clearActive, sendText, stt]);
 
   return (
-    <div className="flex h-full overflow-hidden rounded-2xl border border-white/10 bg-card/40 shadow-xl backdrop-blur-md">
-      {/* Columna principal del chat */}
+    <div className="flex h-full overflow-hidden rounded-2xl border border-white/10 bg-[#12141c]/90 shadow-2xl backdrop-blur-xl">
+      {/* Columna principal */}
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Header limpio */}
-        <header className="flex items-center justify-between gap-3 border-b border-white/8 px-4 py-3">
-          <div className="flex min-w-0 items-center gap-3">
+        {/* HEADER */}
+        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-white/10 px-4">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
             <button
               onClick={createNew}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-muted-foreground transition hover:bg-white/10 hover:text-foreground"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/5 text-muted-foreground transition hover:bg-white/10 hover:text-foreground"
               title="Nueva conversación"
             >
               <Plus className="h-4 w-4" />
             </button>
             <div className="min-w-0">
-              <h1 className="truncate text-sm font-semibold tracking-tight text-foreground">
-                {active?.title || "Chat"}
+              <h1 className="truncate text-[13px] font-semibold leading-tight text-foreground">
+                {active?.title || "Nueva conversación"}
               </h1>
-              <p className="text-[11px] text-muted-foreground">
-                Conversación con Aiko
+              <p className="truncate text-[11px] leading-tight text-muted-foreground">
+                Chat con Aiko
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="hidden items-center rounded-full bg-white/5 p-1 sm:flex">
             {(
               [
                 { id: "fast", label: "Rápido", Icon: Zap },
@@ -447,35 +447,35 @@ export function ChatPanel({
                 key={id}
                 onClick={() => setAnalysisLevel(id)}
                 className={cn(
-                  "hidden items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs transition sm:flex",
+                  "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs transition",
                   analysisLevel === id
-                    ? "bg-primary/20 text-foreground ring-1 ring-primary/30"
-                    : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
                 )}
                 title={label}
               >
                 <Icon className="h-3.5 w-3.5" />
-                <span className="hidden md:inline">{label}</span>
+                <span className="hidden lg:inline">{label}</span>
               </button>
             ))}
-
-            <button
-              onClick={() => setHistoryOpen(!historyOpen)}
-              className={cn(
-                "flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 transition",
-                historyOpen
-                  ? "bg-primary/15 text-primary"
-                  : "bg-white/5 text-muted-foreground hover:bg-white/10 hover:text-foreground",
-              )}
-              title="Historial"
-            >
-              <Search className="h-4 w-4" />
-            </button>
           </div>
+
+          <button
+            onClick={() => setHistoryOpen(!historyOpen)}
+            className={cn(
+              "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition",
+              historyOpen
+                ? "bg-primary/20 text-primary"
+                : "bg-white/5 text-muted-foreground hover:bg-white/10 hover:text-foreground",
+            )}
+            title="Historial"
+          >
+            <Search className="h-4 w-4" />
+          </button>
         </header>
 
         {error && (
-          <div className="border-b border-red-500/20 bg-red-500/10 px-4 py-2.5">
+          <div className="border-b border-red-500/20 bg-red-500/10 px-4 py-2">
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs text-red-300">{error}</p>
               <button
@@ -491,7 +491,7 @@ export function ChatPanel({
         {/* Mensajes */}
         <div
           ref={scrollRef}
-          className="flex-1 space-y-4 overflow-y-auto px-4 py-5 sm:px-6"
+          className="flex-1 space-y-5 overflow-y-auto px-4 py-5 sm:px-6"
         >
           {active?.messages.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
@@ -514,7 +514,7 @@ export function ChatPanel({
         </div>
 
         {/* Input */}
-        <div className="border-t border-white/8 p-3 sm:p-4">
+        <div className="border-t border-white/10 p-3 sm:p-4">
           {attachments.length > 0 && (
             <div className="mb-2 flex flex-wrap gap-2 px-1">
               {attachments.map((att, i) => (
@@ -551,7 +551,7 @@ export function ChatPanel({
             </div>
           )}
 
-          <div className="flex items-end gap-2 rounded-2xl border border-white/10 bg-white/[0.04] p-2 shadow-inner focus-within:border-primary/35 focus-within:ring-1 focus-within:ring-primary/20">
+          <div className="flex items-end gap-2 rounded-2xl border border-white/10 bg-white/[0.04] p-2 shadow-inner focus-within:border-primary/40 focus-within:ring-1 focus-within:ring-primary/20">
             <button
               onClick={() => (stt.listening ? stt.stop() : stt.start())}
               className={cn(
@@ -606,7 +606,7 @@ export function ChatPanel({
                 "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition",
                 input.trim() && !typing && !uploading
                   ? "bg-primary text-primary-foreground shadow-md shadow-primary/25 hover:opacity-95"
-                  : "bg-white/5 text-muted-foreground cursor-not-allowed",
+                  : "cursor-not-allowed bg-white/5 text-muted-foreground",
               )}
               title="Enviar mensaje (Enter)"
             >
@@ -634,10 +634,10 @@ export function ChatPanel({
         </div>
       </div>
 
-      {/* Historial lateral */}
+      {/* Historial */}
       {historyOpen && (
-        <aside className="flex w-64 shrink-0 flex-col border-l border-white/8 bg-black/20">
-          <div className="border-b border-white/8 px-3 py-3">
+        <aside className="flex w-64 shrink-0 flex-col border-l border-white/10 bg-black/25">
+          <div className="border-b border-white/10 px-3 py-3">
             <input
               type="text"
               placeholder="Buscar conversaciones..."
@@ -674,12 +674,7 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
   const isUser = msg.role === "user";
 
   return (
-    <div
-      className={cn(
-        "flex gap-3",
-        isUser ? "justify-end" : "justify-start",
-      )}
-    >
+    <div className={cn("flex gap-3", isUser ? "justify-end" : "justify-start")}>
       {!isUser && (
         <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/20 ring-1 ring-primary/25">
           <Heart className="h-3.5 w-3.5 fill-primary text-primary" />
@@ -688,10 +683,10 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
 
       <div
         className={cn(
-          "max-w-[min(85%,42rem)] rounded-2xl px-4 py-2.5 text-sm leading-relaxed shadow-sm",
+          "max-w-[min(78%,36rem)] rounded-2xl px-4 py-3 text-[13.5px] leading-relaxed",
           isUser
-            ? "rounded-br-md bg-primary text-primary-foreground"
-            : "rounded-bl-md border border-white/10 bg-white/[0.06] text-foreground",
+            ? "rounded-br-md bg-[#ff4d9a] text-white shadow-md shadow-pink-500/20"
+            : "rounded-bl-md border border-white/10 bg-[#1a1d27] text-foreground",
         )}
       >
         {isUser ? (
@@ -763,7 +758,7 @@ function TypingBubble() {
       <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/20 ring-1 ring-primary/25">
         <Heart className="h-3.5 w-3.5 fill-primary text-primary" />
       </div>
-      <div className="flex items-center gap-2 rounded-2xl rounded-bl-md border border-white/10 bg-white/[0.06] px-4 py-3">
+      <div className="flex items-center gap-2 rounded-2xl rounded-bl-md border border-white/10 bg-[#1a1d27] px-4 py-3">
         <span className="text-xs text-muted-foreground">Aiko está escribiendo</span>
         <span className="flex gap-1">
           <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary/80" />
