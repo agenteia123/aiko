@@ -26,7 +26,6 @@ import remarkGfm from "remark-gfm";
 import {
   type ChatMessage,
   type Conversation,
-  deriveTitle,
   loadActiveId,
   loadConversations,
   newConversation,
@@ -73,7 +72,7 @@ interface AttachmentItem {
 
 const QUICK_REPLIES = [
   "Cuéntame algo lindo, Aiko~",
-  "búsqueda profunda: últimas noticias tech",
+  "Búsqueda profunda: últimas noticias tech",
   "Resume mi memoria",
   "Ayúdame a organizar mi día",
 ];
@@ -83,6 +82,36 @@ const LANG_MAP: Record<string, string> = {
   en: "en-US",
   ja: "ja-JP",
 };
+
+/** Título legible a partir del primer mensaje del usuario */
+function makeTitle(text: string): string {
+  let t = text
+    .replace(/\s+/g, " ")
+    .replace(/^crea(r)? un (pdf|word|excel|archivo)\s*(con|de|sobre)?\s*/i, "")
+    .trim();
+
+  if (!t) return "Nueva conversación";
+
+  // Primera letra mayúscula
+  t = t.charAt(0).toUpperCase() + t.slice(1);
+
+  if (t.length > 42) t = t.slice(0, 42).trimEnd() + "…";
+  return t;
+}
+
+function formatWhen(ts?: number): string {
+  if (!ts) return "";
+  try {
+    return new Date(ts).toLocaleString("es-PE", {
+      day: "2-digit",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return "";
+  }
+}
 
 export function ChatPanel({
   onAikoSpeak,
@@ -130,7 +159,25 @@ export function ChatPanel({
           at: Date.now(),
         },
       ];
+      c.title = "Bienvenida";
       list = [c];
+      saveConversations(list);
+    } else {
+      // Mejorar títulos viejos genéricos si hay mensajes de usuario
+      list = list.map((c) => {
+        if (
+          (!c.title ||
+            c.title === "Nueva conversación" ||
+            c.title === "Nueva conversación") &&
+          c.messages?.length
+        ) {
+          const firstUser = c.messages.find((m) => m.role === "user");
+          if (firstUser?.text) {
+            return { ...c, title: makeTitle(firstUser.text) };
+          }
+        }
+        return c;
+      });
       saveConversations(list);
     }
     setConversations(list);
@@ -174,11 +221,13 @@ export function ChatPanel({
 
   const createNew = useCallback(() => {
     const c = newConversation();
+    c.title = "Nueva conversación";
     setConversations((list) => [c, ...list]);
     setActiveId(c.id);
     setInput("");
     setAttachments([]);
     setError(null);
+    setHistoryOpen(false);
     setTimeout(() => inputRef.current?.focus(), 20);
   }, []);
 
@@ -275,11 +324,20 @@ export function ChatPanel({
           : undefined,
       };
 
-      updateActive((c) => ({
-        ...c,
-        messages: [...c.messages, userMsg],
-        title: c.messages.length === 0 ? deriveTitle(text) : c.title,
-      }));
+      updateActive((c) => {
+        const isFirstUser =
+          c.messages.filter((m) => m.role === "user").length === 0;
+        return {
+          ...c,
+          messages: [...c.messages, userMsg],
+          title:
+            isFirstUser ||
+            !c.title ||
+            c.title === "Nueva conversación"
+              ? makeTitle(text)
+              : c.title,
+        };
+      });
 
       setInput("");
       setAttachments([]);
@@ -379,22 +437,29 @@ export function ChatPanel({
 
   const deleteConversation = useCallback(
     (id: string) => {
-      setConversations((list) => list.filter((c) => c.id !== id));
-      if (activeId === id) {
-        const remaining = conversations.filter((c) => c.id !== id);
-        if (remaining.length > 0) {
-          setActiveId(remaining[0].id);
-        } else {
-          createNew();
+      setConversations((list) => {
+        const next = list.filter((c) => c.id !== id);
+        if (activeId === id) {
+          if (next.length > 0) {
+            setActiveId(next[0].id);
+          } else {
+            const c = newConversation();
+            c.title = "Nueva conversación";
+            setActiveId(c.id);
+            return [c];
+          }
         }
-      }
+        return next;
+      });
     },
-    [activeId, conversations, createNew],
+    [activeId],
   );
 
   const renameConversation = useCallback((id: string, newTitle: string) => {
     setConversations((list) =>
-      list.map((c) => (c.id === id ? { ...c, title: newTitle } : c)),
+      list.map((c) =>
+        c.id === id ? { ...c, title: newTitle.trim() || c.title } : c,
+      ),
     );
   }, []);
 
@@ -411,31 +476,39 @@ export function ChatPanel({
     });
   }, [registerActions, createNew, clearActive, sendText, stt]);
 
+  const filteredConversations = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const list = [...conversations].sort(
+      (a, b) => (b.updatedAt || 0) - (a.updatedAt || 0),
+    );
+    if (!q) return list;
+    return list.filter((c) => c.title.toLowerCase().includes(q));
+  }, [conversations, search]);
+
   return (
-    <div className="flex h-full overflow-hidden rounded-2xl border border-white/10 bg-[#12141c]/90 shadow-2xl backdrop-blur-xl">
-      {/* Columna principal */}
+    <div className="relative flex h-full overflow-hidden rounded-2xl border border-white/10 bg-[#12141c]/95 shadow-2xl backdrop-blur-xl">
+      {/* Chat principal (siempre ancho completo) */}
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* HEADER */}
-        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-white/10 px-4">
-          <div className="flex min-w-0 flex-1 items-center gap-3">
-            <button
-              onClick={createNew}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/5 text-muted-foreground transition hover:bg-white/10 hover:text-foreground"
-              title="Nueva conversación"
-            >
-              <Plus className="h-4 w-4" />
-            </button>
-            <div className="min-w-0">
-              <h1 className="truncate text-[13px] font-semibold leading-tight text-foreground">
-                {active?.title || "Nueva conversación"}
-              </h1>
-              <p className="truncate text-[11px] leading-tight text-muted-foreground">
-                Chat con Aiko
-              </p>
-            </div>
+        {/* HEADER limpio */}
+        <header className="flex h-14 shrink-0 items-center gap-2 border-b border-white/10 px-3 sm:px-4">
+          <button
+            onClick={createNew}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/5 text-muted-foreground transition hover:bg-white/10 hover:text-foreground"
+            title="Nueva conversación"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-[13px] font-semibold text-foreground">
+              {active?.title || "Nueva conversación"}
+            </h1>
+            <p className="truncate text-[11px] text-muted-foreground">
+              Chat con Aiko
+            </p>
           </div>
 
-          <div className="hidden items-center rounded-full bg-white/5 p-1 sm:flex">
+          <div className="hidden items-center rounded-full bg-white/5 p-0.5 sm:flex">
             {(
               [
                 { id: "fast", label: "Rápido", Icon: Zap },
@@ -447,7 +520,7 @@ export function ChatPanel({
                 key={id}
                 onClick={() => setAnalysisLevel(id)}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs transition",
+                  "flex items-center gap-1 rounded-full px-2.5 py-1.5 text-xs transition",
                   analysisLevel === id
                     ? "bg-primary text-primary-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground",
@@ -455,20 +528,20 @@ export function ChatPanel({
                 title={label}
               >
                 <Icon className="h-3.5 w-3.5" />
-                <span className="hidden lg:inline">{label}</span>
+                <span className="hidden md:inline">{label}</span>
               </button>
             ))}
           </div>
 
           <button
-            onClick={() => setHistoryOpen(!historyOpen)}
+            onClick={() => setHistoryOpen((v) => !v)}
             className={cn(
               "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition",
               historyOpen
-                ? "bg-primary/20 text-primary"
+                ? "bg-primary/20 text-primary ring-1 ring-primary/30"
                 : "bg-white/5 text-muted-foreground hover:bg-white/10 hover:text-foreground",
             )}
-            title="Historial"
+            title="Historial de chats"
           >
             <Search className="h-4 w-4" />
           </button>
@@ -516,12 +589,11 @@ export function ChatPanel({
         {/* Input */}
         <div className="border-t border-white/10 p-3 sm:p-4">
           {attachments.length > 0 && (
-            <div className="mb-2 flex flex-wrap gap-2 px-1">
+            <div className="mb-2 flex flex-wrap gap-2">
               {attachments.map((att, i) => (
                 <div
                   key={`${att.name}-${i}`}
                   className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs"
-                  title={att.path || att.name}
                 >
                   {att.kind === "image" && att.dataUrl ? (
                     <img
@@ -533,11 +605,6 @@ export function ChatPanel({
                     <Paperclip className="h-3 w-3 text-muted-foreground" />
                   )}
                   <span className="max-w-[100px] truncate">{att.name}</span>
-                  {att.path ? (
-                    <span className="text-[9px] text-emerald-400">✓</span>
-                  ) : (
-                    <span className="text-[9px] text-amber-400">…</span>
-                  )}
                   <button
                     onClick={() =>
                       setAttachments((a) => a.filter((_, j) => j !== i))
@@ -551,16 +618,16 @@ export function ChatPanel({
             </div>
           )}
 
-          <div className="flex items-end gap-2 rounded-2xl border border-white/10 bg-white/[0.04] p-2 shadow-inner focus-within:border-primary/40 focus-within:ring-1 focus-within:ring-primary/20">
+          <div className="flex items-end gap-2 rounded-2xl border border-white/10 bg-white/[0.04] p-2 focus-within:border-primary/40 focus-within:ring-1 focus-within:ring-primary/20">
             <button
               onClick={() => (stt.listening ? stt.stop() : stt.start())}
               className={cn(
                 "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition",
                 stt.listening
-                  ? "bg-accent/20 text-accent ring-1 ring-accent/30"
+                  ? "bg-accent/20 text-accent"
                   : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
               )}
-              title={stt.listening ? "Detener grabación" : "Iniciar grabación"}
+              title={stt.listening ? "Detener" : "Micrófono"}
             >
               <Mic className="h-4 w-4" />
             </button>
@@ -572,7 +639,7 @@ export function ChatPanel({
                   ? "text-accent"
                   : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
               )}
-              title="Adjuntar archivo o imagen"
+              title="Adjuntar"
             >
               {uploading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -595,7 +662,7 @@ export function ChatPanel({
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={onKey}
               placeholder="Mensaje a Aiko..."
-              className="max-h-36 min-h-[40px] flex-1 resize-none bg-transparent px-1 py-2.5 text-sm leading-relaxed outline-none placeholder:text-muted-foreground/60"
+              className="max-h-36 min-h-[40px] flex-1 resize-none bg-transparent px-1 py-2.5 text-sm outline-none placeholder:text-muted-foreground/60"
               rows={1}
             />
 
@@ -605,10 +672,10 @@ export function ChatPanel({
               className={cn(
                 "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition",
                 input.trim() && !typing && !uploading
-                  ? "bg-primary text-primary-foreground shadow-md shadow-primary/25 hover:opacity-95"
+                  ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
                   : "cursor-not-allowed bg-white/5 text-muted-foreground",
               )}
-              title="Enviar mensaje (Enter)"
+              title="Enviar"
             >
               {typing ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -619,14 +686,14 @@ export function ChatPanel({
           </div>
 
           {active?.messages.length === 0 && (
-            <div className="mt-3 flex flex-wrap gap-2 px-1">
+            <div className="mt-3 flex flex-wrap gap-2">
               {QUICK_REPLIES.map((reply, i) => (
                 <button
                   key={i}
                   onClick={() => sendText(reply)}
                   className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-muted-foreground transition hover:border-primary/30 hover:bg-primary/10 hover:text-foreground"
                 >
-                  {reply.length > 36 ? reply.slice(0, 36) + "…" : reply}
+                  {reply.length > 34 ? reply.slice(0, 34) + "…" : reply}
                 </button>
               ))}
             </div>
@@ -634,37 +701,62 @@ export function ChatPanel({
         </div>
       </div>
 
-      {/* Historial */}
+      {/* HISTORIAL — panel superpuesto a la derecha (no aplasta el chat) */}
       {historyOpen && (
-        <aside className="flex w-64 shrink-0 flex-col border-l border-white/10 bg-black/25">
-          <div className="border-b border-white/10 px-3 py-3">
-            <input
-              type="text"
-              placeholder="Buscar conversaciones..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs outline-none placeholder:text-muted-foreground/60 focus:border-primary/30"
-            />
-          </div>
-          <div className="flex-1 space-y-1 overflow-y-auto p-2">
-            {conversations
-              .filter(
-                (c) =>
-                  !search ||
-                  c.title.toLowerCase().includes(search.toLowerCase()),
-              )
-              .map((c) => (
-                <ConversationRow
-                  key={c.id}
-                  conv={c}
-                  active={c.id === activeId}
-                  onClick={() => setActiveId(c.id)}
-                  onDelete={() => deleteConversation(c.id)}
-                  onRename={(title) => renameConversation(c.id, title)}
+        <>
+          {/* Fondo click para cerrar (móvil / desktop) */}
+          <button
+            type="button"
+            className="absolute inset-0 z-20 bg-black/40 sm:bg-black/20"
+            onClick={() => setHistoryOpen(false)}
+            aria-label="Cerrar historial"
+          />
+
+          <aside className="absolute inset-y-0 right-0 z-30 flex w-[min(100%,20rem)] flex-col border-l border-white/10 bg-[#151821] shadow-2xl">
+            <div className="flex items-center gap-2 border-b border-white/10 px-3 py-3">
+              <div className="relative flex-1">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Buscar chats..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full rounded-lg border border-white/10 bg-white/5 py-2 pl-8 pr-3 text-xs outline-none placeholder:text-muted-foreground/60 focus:border-primary/40"
+                  autoFocus
                 />
-              ))}
-          </div>
-        </aside>
+              </div>
+              <button
+                onClick={() => setHistoryOpen(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-white/5 hover:text-foreground"
+                title="Cerrar"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 space-y-1 overflow-y-auto p-2">
+              {filteredConversations.length === 0 ? (
+                <p className="px-2 py-6 text-center text-xs text-muted-foreground">
+                  No hay conversaciones
+                </p>
+              ) : (
+                filteredConversations.map((c) => (
+                  <ConversationRow
+                    key={c.id}
+                    conv={c}
+                    active={c.id === activeId}
+                    onClick={() => {
+                      setActiveId(c.id);
+                      setHistoryOpen(false);
+                    }}
+                    onDelete={() => deleteConversation(c.id)}
+                    onRename={(title) => renameConversation(c.id, title)}
+                  />
+                ))
+              )}
+            </div>
+          </aside>
+        </>
       )}
     </div>
   );
@@ -692,7 +784,7 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
         {isUser ? (
           <p className="whitespace-pre-wrap break-words">{msg.text}</p>
         ) : (
-          <div className="prose prose-sm dark:prose-invert max-w-none break-words prose-p:my-2 prose-headings:my-2 prose-a:text-sky-400 prose-code:rounded prose-code:bg-white/10 prose-code:px-1">
+          <div className="prose prose-sm dark:prose-invert max-w-none break-words prose-p:my-2 prose-a:text-sky-400">
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={{
@@ -710,10 +802,7 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
                   const isBlock = Boolean(className);
                   if (!isBlock) {
                     return (
-                      <code
-                        className="rounded bg-white/10 px-1 py-0.5"
-                        {...props}
-                      >
+                      <code className="rounded bg-white/10 px-1 py-0.5" {...props}>
                         {children}
                       </code>
                     );
@@ -739,7 +828,7 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
             {msg.attachments.map((att, i) => (
               <div
                 key={i}
-                className="flex items-center gap-1 rounded-md bg-black/20 px-2 py-1 text-xs opacity-90"
+                className="flex items-center gap-1 rounded-md bg-black/20 px-2 py-1 text-xs"
               >
                 <Paperclip className="h-3 w-3" />
                 {att.name}
@@ -798,9 +887,9 @@ function ConversationRow({
     <div
       onClick={onClick}
       className={cn(
-        "group flex cursor-pointer items-center gap-2 rounded-xl px-2.5 py-2 transition",
+        "group flex cursor-pointer flex-col gap-0.5 rounded-xl px-3 py-2.5 transition",
         active
-          ? "bg-primary/15 text-foreground ring-1 ring-primary/25"
+          ? "bg-primary/15 text-foreground ring-1 ring-primary/30"
           : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
       )}
     >
@@ -820,19 +909,28 @@ function ConversationRow({
             }
             if (e.key === "Escape") setEditing(false);
           }}
-          className="flex-1 rounded-md border border-white/10 bg-black/20 px-2 py-1 text-xs outline-none"
+          className="w-full rounded-md border border-white/10 bg-black/30 px-2 py-1 text-xs outline-none"
           onClick={(e) => e.stopPropagation()}
         />
       ) : (
-        <>
-          <span className="flex-1 truncate text-xs font-medium">{conv.title}</span>
-          <div className="flex gap-0.5 opacity-0 transition group-hover:opacity-100">
+        <div className="flex items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-xs font-medium text-foreground">
+              {conv.title || "Sin título"}
+            </div>
+            <div className="truncate text-[10px] text-muted-foreground">
+              {formatWhen(conv.updatedAt)}
+            </div>
+          </div>
+          <div className="flex shrink-0 gap-0.5 opacity-0 transition group-hover:opacity-100">
             <button
               onClick={(e) => {
                 e.stopPropagation();
+                setEditValue(conv.title);
                 setEditing(true);
               }}
               className="rounded-md p-1 hover:bg-white/10"
+              title="Renombrar"
             >
               <Pencil className="h-3 w-3" />
             </button>
@@ -842,11 +940,12 @@ function ConversationRow({
                 onDelete();
               }}
               className="rounded-md p-1 hover:bg-white/10"
+              title="Eliminar"
             >
               <Trash2 className="h-3 w-3" />
             </button>
           </div>
-        </>
+        </div>
       )}
     </div>
   );
