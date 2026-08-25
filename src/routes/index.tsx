@@ -6,7 +6,11 @@ import { Toaster } from "@/components/ui/sonner";
 import { AikoAvatar } from "@/components/AikoAvatar";
 import { AikoSidebar, type TabId } from "@/components/AikoSidebar";
 import { ChatPanel, type ChatActions } from "@/components/ChatPanel";
-import { CommandPalette, CommandIcons, type Command } from "@/components/CommandPalette";
+import {
+  CommandPalette,
+  CommandIcons,
+  type Command,
+} from "@/components/CommandPalette";
 import {
   MemoryPanel,
   ModelsPanel,
@@ -15,6 +19,10 @@ import {
   VoicePanel,
 } from "@/components/panels";
 import { ProductivityPanel } from "@/components/ProductivityPanel";
+import {
+  ReminderToast,
+  type FloatingReminder,
+} from "@/components/ReminderToast";
 import { randomVoiceLine } from "@/lib/aiko-lines";
 import { useHotkeys } from "@/lib/useHotkeys";
 import { useTheme } from "@/lib/useTheme";
@@ -22,6 +30,7 @@ import {
   requestNotificationPermission,
   useReminderScheduler,
 } from "@/lib/useReminders";
+import { store, type Reminder } from "@/lib/productivity";
 import { gainXP, onLevelUp, titleFor } from "@/lib/affection";
 import { sfx } from "@/lib/sfx";
 
@@ -29,15 +38,15 @@ export const Route = createFileRoute("/")({
   component: AikoApp,
 });
 
-
 function AikoApp() {
   const [tab, setTab] = useState<TabId>("chat");
   const [alwaysOnTop, setAlwaysOnTop] = useState(false);
   const [reaction, setReaction] = useState<"idle" | "hearts">("idle");
   const [subtitle, setSubtitle] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [floatingReminder, setFloatingReminder] =
+    useState<FloatingReminder | null>(null);
 
-  // Activate theme + request notification permission for reminders on mount.
   useTheme();
   useEffect(() => {
     requestNotificationPermission();
@@ -50,7 +59,6 @@ function AikoApp() {
     });
     return off;
   }, []);
-
 
   // Persisted settings
   const [voiceURI, setVoiceURI] = useState<string | null>(null);
@@ -82,16 +90,27 @@ function AikoApp() {
       /* ignore */
     }
   }, []);
+
   useEffect(() => {
     localStorage.setItem(
       "aiko.settings.v1",
-      JSON.stringify({ voiceURI, rate, pitch, volume, provider, model, modelFolder, language }),
+      JSON.stringify({
+        voiceURI,
+        rate,
+        pitch,
+        volume,
+        provider,
+        model,
+        modelFolder,
+        language,
+      }),
     );
   }, [voiceURI, rate, pitch, volume, provider, model, modelFolder, language]);
 
   const speak = useCallback(
     (text: string) => {
-      if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+      if (typeof window === "undefined" || !("speechSynthesis" in window))
+        return;
       const u = new SpeechSynthesisUtterance(text);
       u.rate = rate;
       u.pitch = pitch;
@@ -102,7 +121,9 @@ function AikoApp() {
       const chosen =
         (voiceURI && voices.find((v) => v.voiceURI === voiceURI)) ||
         voices.find(
-          (v) => v.lang.toLowerCase().startsWith("es") && feminineHints.test(v.name),
+          (v) =>
+            v.lang.toLowerCase().startsWith("es") &&
+            feminineHints.test(v.name),
         ) ||
         voices.find((v) => v.lang.toLowerCase().startsWith("es")) ||
         voices[0];
@@ -115,20 +136,78 @@ function AikoApp() {
 
   const showSubtitle = useCallback((text: string) => {
     setSubtitle(text);
-    window.setTimeout(() => setSubtitle((cur) => (cur === text ? null : cur)), 3500);
+    window.setTimeout(
+      () => setSubtitle((cur) => (cur === text ? null : cur)),
+      3500,
+    );
   }, []);
 
-  // Reminder scheduler — Aiko whispers reminders when they fire.
+  // Cuando un recordatorio vence → ventana flotante + voz + subtítulo
   useReminderScheduler(
     useCallback(
-      (r) => {
+      (r: { id: string; text: string; at: number }) => {
+        setFloatingReminder({
+          id: r.id,
+          text: r.text,
+          at: r.at,
+        });
         const line = `Recordatorio, Ale... ${r.text}`;
         showSubtitle(line);
         speak(line);
+        try {
+          sfx.chime?.();
+        } catch {
+          /* ignore */
+        }
       },
       [showSubtitle, speak],
     ),
   );
+
+  const dismissReminder = useCallback((id: string) => {
+    const items = store.loadReminders();
+    const item = items.find((r) => r.id === id);
+
+    if (item && item.repeat !== "none") {
+      const next: Reminder = {
+        ...item,
+        fired: false,
+        at:
+          item.repeat === "weekly"
+            ? item.at + 7 * 24 * 60 * 60 * 1000
+            : item.at + 24 * 60 * 60 * 1000,
+      };
+      store.saveReminders([
+        ...items.filter((r) => r.id !== id),
+        next,
+      ]);
+    } else {
+      store.saveReminders(
+        items.map((r) => (r.id === id ? { ...r, fired: true } : r)),
+      );
+    }
+    setFloatingReminder((cur) => (cur?.id === id ? null : cur));
+  }, []);
+
+  const snoozeReminder = useCallback((id: string, minutes: number) => {
+    const items = store.loadReminders();
+    store.saveReminders(
+      items.map((r) =>
+        r.id === id
+          ? {
+              ...r,
+              at: Date.now() + minutes * 60 * 1000,
+              fired: false,
+            }
+          : r,
+      ),
+    );
+    setFloatingReminder((cur) => (cur?.id === id ? null : cur));
+    toast.message("Recordatorio pospuesto", {
+      description: `Te aviso en ${minutes} minutos.`,
+      duration: 2500,
+    });
+  }, []);
 
   function onAvatarClick() {
     const line = randomVoiceLine();
@@ -140,25 +219,42 @@ function AikoApp() {
     window.setTimeout(() => setReaction("idle"), 1500);
   }
 
-
   function clearActiveChat() {
     actionsRef.current?.clearActive();
   }
 
   function clearAllHistory() {
-    if (!confirm("¿Borrar TODO el historial de conversaciones? Esto no se puede deshacer.")) return;
+    if (
+      !confirm(
+        "¿Borrar TODO el historial de conversaciones? Esto no se puede deshacer.",
+      )
+    )
+      return;
     localStorage.removeItem("aiko.conversations.v1");
     localStorage.removeItem("aiko.conversations.active.v1");
     localStorage.removeItem("aiko.chat.v1");
     window.location.reload();
   }
 
-  // Global hotkeys
   useHotkeys(
     useMemo(
       () => [
-        { combo: "mod+k", handler: () => setPaletteOpen((v) => !v), allowInInput: true },
-        { combo: "esc", handler: () => setPaletteOpen(false), allowInInput: true },
+        {
+          combo: "mod+k",
+          handler: () => setPaletteOpen((v) => !v),
+          allowInInput: true,
+        },
+        {
+          combo: "esc",
+          handler: () => {
+            if (floatingReminder) {
+              dismissReminder(floatingReminder.id);
+            } else {
+              setPaletteOpen(false);
+            }
+          },
+          allowInInput: true,
+        },
         {
           combo: "mod+shift+n",
           handler: () => actionsRef.current?.newConversation(),
@@ -178,7 +274,7 @@ function AikoApp() {
           allowInInput: true,
         },
       ],
-      [],
+      [floatingReminder, dismissReminder],
     ),
   );
 
@@ -191,7 +287,8 @@ function AikoApp() {
     setPitch,
     volume,
     setVolume,
-    onPreview: () => speak("Mmm... hola, Ale. Soy Aiko. ¿Te gusta cómo suena mi voz?"),
+    onPreview: () =>
+      speak("Mmm... hola, Ale. Soy Aiko. ¿Te gusta cómo suena mi voz?"),
   };
   const modelProps = { provider, setProvider, model, setModel };
 
@@ -272,6 +369,13 @@ function AikoApp() {
         run: () => setTab("settings"),
       },
       {
+        id: "open-productivity",
+        label: "Abrir productividad",
+        icon: CommandIcons.Sparkles,
+        keywords: "tareas recordatorios hábitos",
+        run: () => setTab("productivity"),
+      },
+      {
         id: "clear-active",
         label: "Vaciar conversación activa",
         icon: CommandIcons.Delete,
@@ -320,7 +424,9 @@ function AikoApp() {
             {subtitle && (
               <div
                 className="pointer-events-none absolute left-1/2 top-10 -translate-x-1/2"
-                style={{ animation: "aiko-float-heart 3.4s ease-out forwards" }}
+                style={{
+                  animation: "aiko-float-heart 3.4s ease-out forwards",
+                }}
               >
                 <div className="glass-panel neon-pink rounded-2xl rounded-bl-sm px-4 py-2 text-sm font-medium">
                   {subtitle}
@@ -392,11 +498,18 @@ function AikoApp() {
         onClose={() => setPaletteOpen(false)}
         commands={commands}
       />
+
+      {/* Ventana flotante de recordatorios */}
+      <ReminderToast
+        reminder={floatingReminder}
+        onDismiss={dismissReminder}
+        onSnooze={snoozeReminder}
+      />
+
       <Toaster />
     </div>
   );
 }
-
 
 function TitleBar({
   alwaysOnTop,
