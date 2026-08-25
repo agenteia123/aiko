@@ -21,11 +21,11 @@ import {
   Telescope,
   Heart,
   Download,
-  ExternalLink,
   FileText,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { toast } from "sonner";
 import {
   type ChatMessage,
   type Conversation,
@@ -38,6 +38,8 @@ import {
 import { useSpeechRecognition } from "@/lib/useSpeechRecognition";
 import { cn } from "@/lib/utils";
 import { API_BASE_URL, API_KEY } from "@/config/api";
+import { parseReminderIntent } from "@/lib/parseReminder";
+import { store } from "@/lib/productivity";
 
 interface ChatPanelProps {
   onAikoSpeak?: (text: string) => void;
@@ -132,7 +134,6 @@ function dayLabel(ts: number): string {
   });
 }
 
-/** Extrae links de documentos del texto */
 function extractDocLinks(text: string): { url: string; label: string }[] {
   const links: { url: string; label: string }[] = [];
   const re = /(https?:\/\/[^\s<>"']+)/gi;
@@ -155,7 +156,6 @@ function extractDocLinks(text: string): { url: string; label: string }[] {
       });
     }
   }
-  // únicos
   const seen = new Set<string>();
   return links.filter((l) => {
     if (seen.has(l.url)) return false;
@@ -180,21 +180,21 @@ export function ChatPanel({
   const [uploading, setUploading] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [continuousVoice] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // Ref para poder llamar sendText desde el callback de voz sin dependencias rotas
+  const sendTextRef = useRef<(text: string) => void>(() => {});
+
   const stt = useSpeechRecognition({
     lang: LANG_MAP[language] ?? "es-ES",
-    continuous: continuousVoice,
+    continuous: false,
     onFinal: (text) => {
-      if (continuousVoice) {
-        sendText(text);
-      } else {
-        setInput((v) => (v ? v + " " : "") + text);
-        setTimeout(() => inputRef.current?.focus(), 0);
-      }
+      const t = text.trim();
+      if (!t) return;
+      // Voz → envío automático al sistema (chat + recordatorios + backend)
+      sendTextRef.current(t);
     },
   });
 
@@ -206,7 +206,7 @@ export function ChatPanel({
         {
           id: crypto.randomUUID(),
           role: "aiko",
-          text: "¡Hola Ale! Estoy lista para charlar contigo 💕\n\nPrueba enviándome un mensaje o elige una sugerencia.",
+          text: "¡Hola Ale! Estoy lista para charlar contigo 💕\n\nPrueba enviándome un mensaje, usa el micrófono o elige una sugerencia.",
           at: Date.now(),
         },
       ];
@@ -291,7 +291,9 @@ export function ChatPanel({
     });
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      throw new Error(`Error al subir (${res.status}): ${text || res.statusText}`);
+      throw new Error(
+        `Error al subir (${res.status}): ${text || res.statusText}`,
+      );
     }
     const data = await res.json();
     if (!data?.path) throw new Error("El backend no devolvió path del archivo");
@@ -337,12 +339,52 @@ export function ChatPanel({
     [uploadFile],
   );
 
+  /** Crea recordatorio local si el mensaje lo pide (voz o texto) */
+  const tryCreateReminder = useCallback((text: string) => {
+    const intent = parseReminderIntent(text);
+    if (!intent) return false;
+
+    const items = store.loadReminders();
+    store.saveReminders([
+      {
+        id: crypto.randomUUID(),
+        text: intent.text,
+        at: intent.at,
+        repeat: "none",
+        fired: false,
+      },
+      ...items,
+    ]);
+
+    const when = new Date(intent.at).toLocaleString("es-PE", {
+      day: "2-digit",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    try {
+      toast.success("Recordatorio creado", {
+        description: `${intent.text} · ${when}`,
+        duration: 4000,
+      });
+    } catch {
+      /* ignore */
+    }
+    return true;
+  }, []);
+
   const sendText = useCallback(
     async (rawText: string) => {
       const text = rawText.trim();
       if (!text || !active) return;
+      if (typing || uploading) return;
 
       setError(null);
+
+      // 1) Recordatorio local (voz o texto)
+      tryCreateReminder(text);
+
       const currentAttachments = [...attachments];
 
       const userMsg: ChatMessage = {
@@ -417,7 +459,9 @@ export function ChatPanel({
         if (onAikoSpeak && reply.text) onAikoSpeak(reply.text);
       } catch (err) {
         const errorMsg =
-          err instanceof Error ? err.message : "Error al conectar con el backend";
+          err instanceof Error
+            ? err.message
+            : "Error al conectar con el backend";
         setError(errorMsg);
         updateActive((c) => ({
           ...c,
@@ -435,8 +479,22 @@ export function ChatPanel({
         setTyping(false);
       }
     },
-    [active, updateActive, onAikoSpeak, attachments, analysisLevel],
+    [
+      active,
+      updateActive,
+      onAikoSpeak,
+      attachments,
+      analysisLevel,
+      typing,
+      uploading,
+      tryCreateReminder,
+    ],
   );
+
+  // Mantener ref actualizado para el callback de voz
+  useEffect(() => {
+    sendTextRef.current = sendText;
+  }, [sendText]);
 
   function send() {
     if (input.trim() && !uploading && !typing) sendText(input);
@@ -499,7 +557,6 @@ export function ChatPanel({
     return list.filter((c) => c.title.toLowerCase().includes(q));
   }, [conversations, search]);
 
-  /** Mensajes con separadores de día */
   const timeline = useMemo(() => {
     const msgs = active?.messages || [];
     const items: { type: "day" | "msg"; label?: string; msg?: ChatMessage }[] =
@@ -519,7 +576,6 @@ export function ChatPanel({
   return (
     <div className="relative flex h-full overflow-hidden rounded-2xl border border-white/10 bg-[#0f1117]/95 shadow-2xl">
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Header */}
         <header className="flex h-14 shrink-0 items-center gap-2 border-b border-white/10 px-3 sm:px-4">
           <button
             onClick={createNew}
@@ -534,7 +590,11 @@ export function ChatPanel({
               {active?.title || "Nueva conversación"}
             </h1>
             <p className="truncate text-[11px] text-muted-foreground">
-              Chat con Aiko
+              {stt.listening ? (
+                <span className="text-accent">Escuchando… habla ahora</span>
+              ) : (
+                "Chat con Aiko"
+              )}
             </p>
           </div>
 
@@ -591,7 +651,6 @@ export function ChatPanel({
           </div>
         )}
 
-        {/* Messages */}
         <div
           ref={scrollRef}
           className="flex-1 space-y-4 overflow-y-auto px-4 py-5 sm:px-8"
@@ -605,7 +664,8 @@ export function ChatPanel({
                 ¿En qué te ayudo hoy?
               </h2>
               <p className="mt-1 max-w-sm text-xs text-muted-foreground">
-                Pregúntame lo que quieras, pide un PDF o usa una sugerencia.
+                Escribe, usa el micrófono o elige una sugerencia. La voz se
+                envía sola al terminar de hablar.
               </p>
               <div className="mt-6 grid w-full max-w-md grid-cols-1 gap-2 sm:grid-cols-2">
                 {QUICK_REPLIES.map((q) => (
@@ -642,7 +702,6 @@ export function ChatPanel({
           {typing && <TypingBubble />}
         </div>
 
-        {/* Input */}
         <div className="border-t border-white/10 bg-[#0f1117]/80 p-3 sm:p-4">
           {attachments.length > 0 && (
             <div className="mb-2 flex flex-wrap gap-2">
@@ -680,10 +739,14 @@ export function ChatPanel({
               className={cn(
                 "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition",
                 stt.listening
-                  ? "bg-accent/20 text-accent"
+                  ? "bg-accent/25 text-accent ring-2 ring-accent/40 animate-pulse"
                   : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
               )}
-              title="Micrófono"
+              title={
+                stt.listening
+                  ? "Detener (al terminar se envía solo)"
+                  : "Hablar — se envía al terminar"
+              }
             >
               <Mic className="h-4 w-4" />
             </button>
@@ -717,7 +780,11 @@ export function ChatPanel({
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={onKey}
-              placeholder="Mensaje a Aiko..."
+              placeholder={
+                stt.listening
+                  ? "Escuchando… suelta cuando termines"
+                  : "Mensaje a Aiko… o usa el micrófono"
+              }
               className="max-h-36 min-h-[40px] flex-1 resize-none bg-transparent px-1 py-2.5 text-sm outline-none placeholder:text-muted-foreground/60"
               rows={1}
             />
@@ -741,12 +808,11 @@ export function ChatPanel({
             </button>
           </div>
           <p className="mt-2 text-center text-[10px] text-muted-foreground/70">
-            Enter para enviar · Shift+Enter nueva línea
+            Enter envía · Micrófono envía solo al terminar de hablar
           </p>
         </div>
       </div>
 
-      {/* Historial overlay */}
       {historyOpen && (
         <>
           <button
@@ -807,7 +873,6 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
   const isUser = msg.role === "user";
   const docs = !isUser ? extractDocLinks(msg.text) : [];
 
-  // Quitar URLs crudas del texto si ya mostramos botones
   let displayText = msg.text;
   if (docs.length) {
     for (const d of docs) {
@@ -901,7 +966,9 @@ function TypingBubble() {
         <Heart className="h-3.5 w-3.5 fill-primary text-primary" />
       </div>
       <div className="flex items-center gap-2 rounded-2xl rounded-bl-md border border-white/10 bg-[#1a1d27] px-4 py-3">
-        <span className="text-xs text-muted-foreground">Aiko está escribiendo</span>
+        <span className="text-xs text-muted-foreground">
+          Aiko está escribiendo
+        </span>
         <span className="flex gap-1">
           <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary/80" />
           <span
