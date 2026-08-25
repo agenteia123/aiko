@@ -9,20 +9,20 @@
 /**
  * URL base del backend FastAPI
  * En desarrollo: http://localhost:8000
- * En producción: https://tu-dominio.com
+ * En producción: https://aiko-backend-sistema-1.onrender.com
  */
 export const API_BASE_URL = 
-  process.env.REACT_APP_API_URL || 
-  process.env.VITE_API_URL ||
-  "http://localhost:8000";
+  process.env.VITE_API_URL || 
+  process.env.REACT_APP_API_URL ||
+  "https://aiko-backend-sistema-1.onrender.com";
 
 /**
  * API Key para autenticación con el backend
  * Debe coincidir con API_KEY en el .env del backend
  */
 export const API_KEY =
-  process.env.REACT_APP_API_KEY ||
   process.env.VITE_API_KEY ||
+  process.env.REACT_APP_API_KEY ||
   "aiko-default-key-change-in-production";
 
 /**
