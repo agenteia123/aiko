@@ -16,6 +16,10 @@ import {
   Plus,
   Pencil,
   Trash2,
+  Zap,
+  Scale,
+  Telescope,
+  Heart,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -186,16 +190,13 @@ export function ChatPanel({
     }));
   }, [updateActive]);
 
-  /** Sube archivo al backend y obtiene path real */
   const uploadFile = useCallback(async (file: File): Promise<AttachmentItem> => {
     const form = new FormData();
     form.append("file", file);
 
     const res = await fetch(`${API_BASE_URL}/api/upload`, {
       method: "POST",
-      headers: {
-        "X-API-Key": API_KEY,
-      },
+      headers: { "X-API-Key": API_KEY },
       body: form,
     });
 
@@ -364,7 +365,7 @@ export function ChatPanel({
   );
 
   function send() {
-    if (input.trim() && !uploading) {
+    if (input.trim() && !uploading && !typing) {
       sendText(input);
     }
   }
@@ -411,221 +412,241 @@ export function ChatPanel({
   }, [registerActions, createNew, clearActive, sendText, stt]);
 
   return (
-    <div className="glass-panel flex h-full flex-col overflow-hidden rounded-2xl">
-      <div className="border-b border-white/5 px-4 py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
+    <div className="flex h-full overflow-hidden rounded-2xl border border-white/10 bg-card/40 shadow-xl backdrop-blur-md">
+      {/* Columna principal del chat */}
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* Header limpio */}
+        <header className="flex items-center justify-between gap-3 border-b border-white/8 px-4 py-3">
+          <div className="flex min-w-0 items-center gap-3">
             <button
               onClick={createNew}
-              className="h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-white/5 transition"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-muted-foreground transition hover:bg-white/10 hover:text-foreground"
               title="Nueva conversación"
             >
               <Plus className="h-4 w-4" />
             </button>
-            <h1 className="text-sm font-semibold">
-              {active?.title || "Chat"}
-            </h1>
-          </div>
-
-          <div className="flex gap-1">
-            {(["fast", "balanced", "deep"] as const).map((level) => (
-              <button
-                key={level}
-                onClick={() => setAnalysisLevel(level)}
-                className={cn(
-                  "px-2 py-1 text-xs rounded transition",
-                  analysisLevel === level
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-white/5",
-                )}
-                title={
-                  level === "fast"
-                    ? "Rápido"
-                    : level === "balanced"
-                      ? "Balanceado"
-                      : "Profundo"
-                }
-              >
-                {level === "fast" ? "⚡" : level === "balanced" ? "⚖️" : "🔍"}
-              </button>
-            ))}
-          </div>
-
-          <button
-            onClick={() => setHistoryOpen(!historyOpen)}
-            className="h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-white/5 transition"
-            title="Historial"
-          >
-            <Search className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
-
-      {error && (
-        <div className="bg-red-500/10 border-b border-red-500/20 px-4 py-2">
-          <div className="flex items-center justify-between">
-            <p className="text-xs text-red-400">{error}</p>
-            <button
-              onClick={() => setError(null)}
-              className="text-red-400 hover:text-red-300"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      )}
-
-      <div
-        ref={scrollRef}
-        className="flex-1 space-y-3 overflow-y-auto px-4 py-4"
-      >
-        {active?.messages.length === 0 ? (
-          <div className="flex h-full items-center justify-center">
-            <div className="text-center">
-              <Sparkles className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
-              <p className="text-sm text-muted-foreground">
-                Sin mensajes aún. ¡Empieza a charlar!
+            <div className="min-w-0">
+              <h1 className="truncate text-sm font-semibold tracking-tight text-foreground">
+                {active?.title || "Chat"}
+              </h1>
+              <p className="text-[11px] text-muted-foreground">
+                Conversación con Aiko
               </p>
             </div>
           </div>
-        ) : (
-          active?.messages.map((m) => <MessageBubble key={m.id} msg={m} />)
-        )}
-        {typing && <TypingBubble />}
-      </div>
 
-      <div className="border-t border-white/5 p-3 space-y-2">
-        {attachments.length > 0 && (
-          <div className="flex flex-wrap gap-2 px-2">
-            {attachments.map((att, i) => (
-              <div
-                key={`${att.name}-${i}`}
-                className="flex items-center gap-1 bg-white/5 rounded px-2 py-1 text-xs"
-                title={att.path || att.name}
-              >
-                {att.kind === "image" && att.dataUrl ? (
-                  <img
-                    src={att.dataUrl}
-                    alt={att.name}
-                    className="h-6 w-6 rounded object-cover"
-                  />
-                ) : (
-                  <Paperclip className="h-3 w-3" />
-                )}
-                <span className="truncate max-w-[100px]">{att.name}</span>
-                {att.path ? (
-                  <span className="text-[9px] text-emerald-400">✓</span>
-                ) : (
-                  <span className="text-[9px] text-amber-400">…</span>
-                )}
-                <button
-                  onClick={() =>
-                    setAttachments((a) => a.filter((_, j) => j !== i))
-                  }
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div className="glass-panel flex items-end gap-2 rounded-xl p-2">
-          <button
-            onClick={() => (stt.listening ? stt.stop() : stt.start())}
-            className={cn(
-              "h-9 w-9 flex items-center justify-center rounded-lg transition",
-              stt.listening
-                ? "bg-accent text-accent-foreground"
-                : "text-muted-foreground hover:bg-white/5",
-            )}
-            title={stt.listening ? "Detener grabación" : "Iniciar grabación"}
-          >
-            <Mic className="h-4 w-4" />
-          </button>
-
-          <label
-            className={cn(
-              "h-9 w-9 flex items-center justify-center rounded-lg cursor-pointer transition",
-              uploading
-                ? "text-accent"
-                : "text-muted-foreground hover:bg-white/5",
-            )}
-            title="Adjuntar archivo o imagen"
-          >
-            {uploading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Paperclip className="h-4 w-4" />
-            )}
-            <input
-              type="file"
-              multiple
-              accept="image/*,.pdf,.doc,.docx,.txt"
-              onChange={onPickFiles}
-              className="hidden"
-              disabled={uploading}
-            />
-          </label>
-
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={onKey}
-            placeholder="Mensaje a Aiko..."
-            className="flex-1 resize-none bg-transparent px-2 py-2 text-sm outline-none max-h-32"
-            rows={1}
-          />
-
-          <button
-            onClick={send}
-            disabled={!input.trim() || typing || uploading}
-            className={cn(
-              "h-9 w-9 flex items-center justify-center rounded-lg transition",
-              input.trim() && !typing && !uploading
-                ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                : "bg-primary/50 text-primary-foreground/50 cursor-not-allowed",
-            )}
-            title="Enviar mensaje (Enter)"
-          >
-            {typing ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Send className="h-4 w-4" />
-            )}
-          </button>
-        </div>
-
-        {active?.messages.length === 0 && (
-          <div className="flex flex-wrap gap-1 px-2">
-            {QUICK_REPLIES.map((reply, i) => (
+          <div className="flex items-center gap-1.5">
+            {(
+              [
+                { id: "fast", label: "Rápido", Icon: Zap },
+                { id: "balanced", label: "Medio", Icon: Scale },
+                { id: "deep", label: "Profundo", Icon: Telescope },
+              ] as const
+            ).map(({ id, label, Icon }) => (
               <button
-                key={i}
-                onClick={() => sendText(reply)}
-                className="text-xs px-2 py-1 rounded bg-white/5 hover:bg-white/10 transition text-muted-foreground hover:text-foreground"
+                key={id}
+                onClick={() => setAnalysisLevel(id)}
+                className={cn(
+                  "hidden items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs transition sm:flex",
+                  analysisLevel === id
+                    ? "bg-primary/20 text-foreground ring-1 ring-primary/30"
+                    : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
+                )}
+                title={label}
               >
-                {reply.slice(0, 30)}
-                {reply.length > 30 ? "..." : ""}
+                <Icon className="h-3.5 w-3.5" />
+                <span className="hidden md:inline">{label}</span>
               </button>
             ))}
+
+            <button
+              onClick={() => setHistoryOpen(!historyOpen)}
+              className={cn(
+                "flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 transition",
+                historyOpen
+                  ? "bg-primary/15 text-primary"
+                  : "bg-white/5 text-muted-foreground hover:bg-white/10 hover:text-foreground",
+              )}
+              title="Historial"
+            >
+              <Search className="h-4 w-4" />
+            </button>
+          </div>
+        </header>
+
+        {error && (
+          <div className="border-b border-red-500/20 bg-red-500/10 px-4 py-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs text-red-300">{error}</p>
+              <button
+                onClick={() => setError(null)}
+                className="rounded-md p-1 text-red-300 hover:bg-red-500/20"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         )}
+
+        {/* Mensajes */}
+        <div
+          ref={scrollRef}
+          className="flex-1 space-y-4 overflow-y-auto px-4 py-5 sm:px-6"
+        >
+          {active?.messages.length === 0 ? (
+            <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/15 ring-1 ring-primary/25">
+                <Sparkles className="h-6 w-6 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-foreground">
+                  ¿En qué te ayudo hoy?
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Escribe un mensaje o usa una sugerencia rápida
+                </p>
+              </div>
+            </div>
+          ) : (
+            active?.messages.map((m) => <MessageBubble key={m.id} msg={m} />)
+          )}
+          {typing && <TypingBubble />}
+        </div>
+
+        {/* Input */}
+        <div className="border-t border-white/8 p-3 sm:p-4">
+          {attachments.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-2 px-1">
+              {attachments.map((att, i) => (
+                <div
+                  key={`${att.name}-${i}`}
+                  className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs"
+                  title={att.path || att.name}
+                >
+                  {att.kind === "image" && att.dataUrl ? (
+                    <img
+                      src={att.dataUrl}
+                      alt={att.name}
+                      className="h-6 w-6 rounded object-cover"
+                    />
+                  ) : (
+                    <Paperclip className="h-3 w-3 text-muted-foreground" />
+                  )}
+                  <span className="max-w-[100px] truncate">{att.name}</span>
+                  {att.path ? (
+                    <span className="text-[9px] text-emerald-400">✓</span>
+                  ) : (
+                    <span className="text-[9px] text-amber-400">…</span>
+                  )}
+                  <button
+                    onClick={() =>
+                      setAttachments((a) => a.filter((_, j) => j !== i))
+                    }
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex items-end gap-2 rounded-2xl border border-white/10 bg-white/[0.04] p-2 shadow-inner focus-within:border-primary/35 focus-within:ring-1 focus-within:ring-primary/20">
+            <button
+              onClick={() => (stt.listening ? stt.stop() : stt.start())}
+              className={cn(
+                "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition",
+                stt.listening
+                  ? "bg-accent/20 text-accent ring-1 ring-accent/30"
+                  : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
+              )}
+              title={stt.listening ? "Detener grabación" : "Iniciar grabación"}
+            >
+              <Mic className="h-4 w-4" />
+            </button>
+
+            <label
+              className={cn(
+                "flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-xl transition",
+                uploading
+                  ? "text-accent"
+                  : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
+              )}
+              title="Adjuntar archivo o imagen"
+            >
+              {uploading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Paperclip className="h-4 w-4" />
+              )}
+              <input
+                type="file"
+                multiple
+                accept="image/*,.pdf,.doc,.docx,.txt"
+                onChange={onPickFiles}
+                className="hidden"
+                disabled={uploading}
+              />
+            </label>
+
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={onKey}
+              placeholder="Mensaje a Aiko..."
+              className="max-h-36 min-h-[40px] flex-1 resize-none bg-transparent px-1 py-2.5 text-sm leading-relaxed outline-none placeholder:text-muted-foreground/60"
+              rows={1}
+            />
+
+            <button
+              onClick={send}
+              disabled={!input.trim() || typing || uploading}
+              className={cn(
+                "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition",
+                input.trim() && !typing && !uploading
+                  ? "bg-primary text-primary-foreground shadow-md shadow-primary/25 hover:opacity-95"
+                  : "bg-white/5 text-muted-foreground cursor-not-allowed",
+              )}
+              title="Enviar mensaje (Enter)"
+            >
+              {typing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+            </button>
+          </div>
+
+          {active?.messages.length === 0 && (
+            <div className="mt-3 flex flex-wrap gap-2 px-1">
+              {QUICK_REPLIES.map((reply, i) => (
+                <button
+                  key={i}
+                  onClick={() => sendText(reply)}
+                  className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-muted-foreground transition hover:border-primary/30 hover:bg-primary/10 hover:text-foreground"
+                >
+                  {reply.length > 36 ? reply.slice(0, 36) + "…" : reply}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
+      {/* Historial lateral */}
       {historyOpen && (
-        <div className="border-l border-white/5 w-64 bg-black/20 flex flex-col">
-          <div className="border-b border-white/5 px-3 py-2">
+        <aside className="flex w-64 shrink-0 flex-col border-l border-white/8 bg-black/20">
+          <div className="border-b border-white/8 px-3 py-3">
             <input
               type="text"
-              placeholder="Buscar..."
+              placeholder="Buscar conversaciones..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full text-xs bg-white/5 rounded px-2 py-1 outline-none"
+              className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs outline-none placeholder:text-muted-foreground/60 focus:border-primary/30"
             />
           </div>
-          <div className="flex-1 overflow-y-auto space-y-1 p-2">
+          <div className="flex-1 space-y-1 overflow-y-auto p-2">
             {conversations
               .filter(
                 (c) =>
@@ -643,7 +664,7 @@ export function ChatPanel({
                 />
               ))}
           </div>
-        </div>
+        </aside>
       )}
     </div>
   );
@@ -653,19 +674,30 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
   const isUser = msg.role === "user";
 
   return (
-    <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
+    <div
+      className={cn(
+        "flex gap-3",
+        isUser ? "justify-end" : "justify-start",
+      )}
+    >
+      {!isUser && (
+        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/20 ring-1 ring-primary/25">
+          <Heart className="h-3.5 w-3.5 fill-primary text-primary" />
+        </div>
+      )}
+
       <div
         className={cn(
-          "max-w-[85%] rounded-2xl px-4 py-2 text-sm",
+          "max-w-[min(85%,42rem)] rounded-2xl px-4 py-2.5 text-sm leading-relaxed shadow-sm",
           isUser
-            ? "rounded-tr-sm bg-primary text-primary-foreground"
-            : "max-w-[90%] text-foreground",
+            ? "rounded-br-md bg-primary text-primary-foreground"
+            : "rounded-bl-md border border-white/10 bg-white/[0.06] text-foreground",
         )}
       >
         {isUser ? (
-          <p className="break-words">{msg.text}</p>
+          <p className="whitespace-pre-wrap break-words">{msg.text}</p>
         ) : (
-          <div className="prose prose-sm dark:prose-invert max-w-none break-words">
+          <div className="prose prose-sm dark:prose-invert max-w-none break-words prose-p:my-2 prose-headings:my-2 prose-a:text-sky-400 prose-code:rounded prose-code:bg-white/10 prose-code:px-1">
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={{
@@ -674,7 +706,7 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
                     href={href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-blue-400 hover:underline"
+                    className="text-sky-400 underline-offset-2 hover:underline"
                   >
                     {children}
                   </a>
@@ -684,7 +716,7 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
                   if (!isBlock) {
                     return (
                       <code
-                        className="bg-white/10 rounded px-1 py-0.5"
+                        className="rounded bg-white/10 px-1 py-0.5"
                         {...props}
                       >
                         {children}
@@ -693,7 +725,7 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
                   }
                   return (
                     <code
-                      className="block bg-white/5 rounded p-2 overflow-x-auto"
+                      className="block overflow-x-auto rounded-lg bg-black/30 p-3 text-xs"
                       {...props}
                     >
                       {children}
@@ -708,11 +740,11 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
         )}
 
         {msg.attachments && msg.attachments.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1">
+          <div className="mt-2 flex flex-wrap gap-1.5">
             {msg.attachments.map((att, i) => (
               <div
                 key={i}
-                className="flex items-center gap-1 bg-white/10 rounded px-2 py-1 text-xs"
+                className="flex items-center gap-1 rounded-md bg-black/20 px-2 py-1 text-xs opacity-90"
               >
                 <Paperclip className="h-3 w-3" />
                 {att.name}
@@ -727,19 +759,24 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
 
 function TypingBubble() {
   return (
-    <div className="flex items-center gap-1.5 text-accent">
-      <span className="text-xs">Aiko está escribiendo</span>
-      <span className="flex gap-1">
-        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-accent" />
-        <span
-          className="h-1.5 w-1.5 animate-bounce rounded-full bg-accent"
-          style={{ animationDelay: "0.15s" }}
-        />
-        <span
-          className="h-1.5 w-1.5 animate-bounce rounded-full bg-accent"
-          style={{ animationDelay: "0.3s" }}
-        />
-      </span>
+    <div className="flex items-center gap-3">
+      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/20 ring-1 ring-primary/25">
+        <Heart className="h-3.5 w-3.5 fill-primary text-primary" />
+      </div>
+      <div className="flex items-center gap-2 rounded-2xl rounded-bl-md border border-white/10 bg-white/[0.06] px-4 py-3">
+        <span className="text-xs text-muted-foreground">Aiko está escribiendo</span>
+        <span className="flex gap-1">
+          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary/80" />
+          <span
+            className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary/80"
+            style={{ animationDelay: "0.15s" }}
+          />
+          <span
+            className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary/80"
+            style={{ animationDelay: "0.3s" }}
+          />
+        </span>
+      </div>
     </div>
   );
 }
@@ -766,8 +803,10 @@ function ConversationRow({
     <div
       onClick={onClick}
       className={cn(
-        "group flex items-center gap-2 rounded-lg px-2 py-1.5 cursor-pointer transition",
-        active ? "bg-primary text-primary-foreground" : "hover:bg-white/5",
+        "group flex cursor-pointer items-center gap-2 rounded-xl px-2.5 py-2 transition",
+        active
+          ? "bg-primary/15 text-foreground ring-1 ring-primary/25"
+          : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
       )}
     >
       {editing ? (
@@ -786,19 +825,19 @@ function ConversationRow({
             }
             if (e.key === "Escape") setEditing(false);
           }}
-          className="flex-1 bg-white/10 rounded px-1 text-xs outline-none"
+          className="flex-1 rounded-md border border-white/10 bg-black/20 px-2 py-1 text-xs outline-none"
           onClick={(e) => e.stopPropagation()}
         />
       ) : (
         <>
-          <span className="flex-1 truncate text-xs">{conv.title}</span>
-          <div className="opacity-0 group-hover:opacity-100 flex gap-0.5">
+          <span className="flex-1 truncate text-xs font-medium">{conv.title}</span>
+          <div className="flex gap-0.5 opacity-0 transition group-hover:opacity-100">
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 setEditing(true);
               }}
-              className="p-1 hover:bg-white/20 rounded"
+              className="rounded-md p-1 hover:bg-white/10"
             >
               <Pencil className="h-3 w-3" />
             </button>
@@ -807,7 +846,7 @@ function ConversationRow({
                 e.stopPropagation();
                 onDelete();
               }}
-              className="p-1 hover:bg-white/20 rounded"
+              className="rounded-md p-1 hover:bg-white/10"
             >
               <Trash2 className="h-3 w-3" />
             </button>
