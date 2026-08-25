@@ -20,6 +20,9 @@ import {
   Scale,
   Telescope,
   Heart,
+  Download,
+  ExternalLink,
+  FileText,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -71,10 +74,11 @@ interface AttachmentItem {
 }
 
 const QUICK_REPLIES = [
-  "Cuéntame algo lindo, Aiko~",
-  "Búsqueda profunda: últimas noticias tech",
-  "Resume mi memoria",
-  "Ayúdame a organizar mi día",
+  { label: "Algo lindo", text: "Cuéntame algo lindo, Aiko~" },
+  { label: "Noticias tech", text: "Búsqueda profunda: últimas noticias tech" },
+  { label: "Mi memoria", text: "Resume mi memoria" },
+  { label: "Organizar el día", text: "Ayúdame a organizar mi día" },
+  { label: "Guía PDF", text: "Crea un pdf con una guía de dieta saludable" },
 ];
 
 const LANG_MAP: Record<string, string> = {
@@ -83,18 +87,13 @@ const LANG_MAP: Record<string, string> = {
   ja: "ja-JP",
 };
 
-/** Título legible a partir del primer mensaje del usuario */
 function makeTitle(text: string): string {
   let t = text
     .replace(/\s+/g, " ")
     .replace(/^crea(r)? un (pdf|word|excel|archivo)\s*(con|de|sobre)?\s*/i, "")
     .trim();
-
   if (!t) return "Nueva conversación";
-
-  // Primera letra mayúscula
   t = t.charAt(0).toUpperCase() + t.slice(1);
-
   if (t.length > 42) t = t.slice(0, 42).trimEnd() + "…";
   return t;
 }
@@ -111,6 +110,58 @@ function formatWhen(ts?: number): string {
   } catch {
     return "";
   }
+}
+
+function dayLabel(ts: number): string {
+  const d = new Date(ts);
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+
+  const sameDay = (a: Date, b: Date) =>
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate();
+
+  if (sameDay(d, today)) return "Hoy";
+  if (sameDay(d, yesterday)) return "Ayer";
+  return d.toLocaleDateString("es-PE", {
+    weekday: "long",
+    day: "numeric",
+    month: "short",
+  });
+}
+
+/** Extrae links de documentos del texto */
+function extractDocLinks(text: string): { url: string; label: string }[] {
+  const links: { url: string; label: string }[] = [];
+  const re = /(https?:\/\/[^\s<>"']+)/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    let url = m[1].replace(/[),.;]+$/, "");
+    const lower = url.toLowerCase();
+    if (
+      lower.includes("supabase.co") ||
+      lower.endsWith(".pdf") ||
+      lower.includes("/storage/") ||
+      lower.includes(".docx") ||
+      lower.includes(".xlsx")
+    ) {
+      const name = decodeURIComponent(url.split("/").pop() || "documento");
+      const clean = name.split("?")[0];
+      links.push({
+        url,
+        label: clean.length > 36 ? clean.slice(0, 36) + "…" : clean,
+      });
+    }
+  }
+  // únicos
+  const seen = new Set<string>();
+  return links.filter((l) => {
+    if (seen.has(l.url)) return false;
+    seen.add(l.url);
+    return true;
+  });
 }
 
 export function ChatPanel({
@@ -155,7 +206,7 @@ export function ChatPanel({
         {
           id: crypto.randomUUID(),
           role: "aiko",
-          text: "¡Hola Ale! Estoy lista para charlar contigo 💕\n\nPrueba enviándome mensajes.",
+          text: "¡Hola Ale! Estoy lista para charlar contigo 💕\n\nPrueba enviándome un mensaje o elige una sugerencia.",
           at: Date.now(),
         },
       ];
@@ -163,18 +214,13 @@ export function ChatPanel({
       list = [c];
       saveConversations(list);
     } else {
-      // Mejorar títulos viejos genéricos si hay mensajes de usuario
       list = list.map((c) => {
         if (
-          (!c.title ||
-            c.title === "Nueva conversación" ||
-            c.title === "Nueva conversación") &&
+          (!c.title || c.title === "Nueva conversación") &&
           c.messages?.length
         ) {
           const firstUser = c.messages.find((m) => m.role === "user");
-          if (firstUser?.text) {
-            return { ...c, title: makeTitle(firstUser.text) };
-          }
+          if (firstUser?.text) return { ...c, title: makeTitle(firstUser.text) };
         }
         return c;
       });
@@ -201,11 +247,7 @@ export function ChatPanel({
 
   useEffect(() => {
     const el = scrollRef.current;
-    if (el) {
-      setTimeout(() => {
-        el.scrollTop = el.scrollHeight;
-      }, 0);
-    }
+    if (el) setTimeout(() => (el.scrollTop = el.scrollHeight), 0);
   }, [active?.messages, typing]);
 
   const updateActive = useCallback(
@@ -242,24 +284,17 @@ export function ChatPanel({
   const uploadFile = useCallback(async (file: File): Promise<AttachmentItem> => {
     const form = new FormData();
     form.append("file", file);
-
     const res = await fetch(`${API_BASE_URL}/api/upload`, {
       method: "POST",
       headers: { "X-API-Key": API_KEY },
       body: form,
     });
-
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      throw new Error(
-        `Error al subir (${res.status}): ${text || res.statusText}`,
-      );
+      throw new Error(`Error al subir (${res.status}): ${text || res.statusText}`);
     }
-
     const data = await res.json();
-    if (!data?.path) {
-      throw new Error("El backend no devolvió path del archivo");
-    }
+    if (!data?.path) throw new Error("El backend no devolvió path del archivo");
 
     const dataUrl = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
@@ -284,7 +319,6 @@ export function ChatPanel({
       const files = Array.from(e.currentTarget.files || []);
       e.currentTarget.value = "";
       if (!files.length) return;
-
       setError(null);
       setUploading(true);
       try {
@@ -293,11 +327,8 @@ export function ChatPanel({
           setAttachments((prev) => [...prev, item]);
         }
       } catch (err) {
-        console.error("Upload error:", err);
         setError(
-          err instanceof Error
-            ? err.message
-            : "No se pudo subir el archivo al backend",
+          err instanceof Error ? err.message : "No se pudo subir el archivo",
         );
       } finally {
         setUploading(false);
@@ -319,9 +350,7 @@ export function ChatPanel({
         role: "user",
         text,
         at: Date.now(),
-        attachments: currentAttachments.length
-          ? currentAttachments
-          : undefined,
+        attachments: currentAttachments.length ? currentAttachments : undefined,
       };
 
       updateActive((c) => {
@@ -331,9 +360,7 @@ export function ChatPanel({
           ...c,
           messages: [...c.messages, userMsg],
           title:
-            isFirstUser ||
-            !c.title ||
-            c.title === "Nueva conversación"
+            isFirstUser || !c.title || c.title === "Nueva conversación"
               ? makeTitle(text)
               : c.title,
         };
@@ -372,17 +399,12 @@ export function ChatPanel({
         }
 
         const data: BackendChatResponse = await response.json();
-
-        if (!data.success) {
-          throw new Error(data.error || "Backend returned an error");
-        }
+        if (!data.success) throw new Error(data.error || "Backend error");
 
         const reply: ChatMessage = {
           id: data.message_id || crypto.randomUUID(),
           role: "aiko",
-          text:
-            data.response ||
-            "No pude procesar tu mensaje correctamente.",
+          text: data.response || "No pude procesar tu mensaje correctamente.",
           at: data.timestamp || Date.now(),
           tool: data.tool_calls ? { calls: data.tool_calls } : undefined,
         };
@@ -392,17 +414,11 @@ export function ChatPanel({
           messages: [...c.messages, reply],
         }));
 
-        if (onAikoSpeak && reply.text) {
-          onAikoSpeak(reply.text);
-        }
+        if (onAikoSpeak && reply.text) onAikoSpeak(reply.text);
       } catch (err) {
-        console.error("Chat error:", err);
         const errorMsg =
-          err instanceof Error
-            ? err.message
-            : "Error desconocido al conectar con el backend";
+          err instanceof Error ? err.message : "Error al conectar con el backend";
         setError(errorMsg);
-
         updateActive((c) => ({
           ...c,
           messages: [
@@ -423,9 +439,7 @@ export function ChatPanel({
   );
 
   function send() {
-    if (input.trim() && !uploading && !typing) {
-      sendText(input);
-    }
+    if (input.trim() && !uploading && !typing) sendText(input);
   }
 
   function onKey(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -485,11 +499,27 @@ export function ChatPanel({
     return list.filter((c) => c.title.toLowerCase().includes(q));
   }, [conversations, search]);
 
+  /** Mensajes con separadores de día */
+  const timeline = useMemo(() => {
+    const msgs = active?.messages || [];
+    const items: { type: "day" | "msg"; label?: string; msg?: ChatMessage }[] =
+      [];
+    let lastDay = "";
+    for (const m of msgs) {
+      const label = dayLabel(m.at || Date.now());
+      if (label !== lastDay) {
+        items.push({ type: "day", label });
+        lastDay = label;
+      }
+      items.push({ type: "msg", msg: m });
+    }
+    return items;
+  }, [active?.messages]);
+
   return (
-    <div className="relative flex h-full overflow-hidden rounded-2xl border border-white/10 bg-[#12141c]/95 shadow-2xl backdrop-blur-xl">
-      {/* Chat principal (siempre ancho completo) */}
+    <div className="relative flex h-full overflow-hidden rounded-2xl border border-white/10 bg-[#0f1117]/95 shadow-2xl">
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* HEADER limpio */}
+        {/* Header */}
         <header className="flex h-14 shrink-0 items-center gap-2 border-b border-white/10 px-3 sm:px-4">
           <button
             onClick={createNew}
@@ -541,7 +571,7 @@ export function ChatPanel({
                 ? "bg-primary/20 text-primary ring-1 ring-primary/30"
                 : "bg-white/5 text-muted-foreground hover:bg-white/10 hover:text-foreground",
             )}
-            title="Historial de chats"
+            title="Historial"
           >
             <Search className="h-4 w-4" />
           </button>
@@ -561,33 +591,59 @@ export function ChatPanel({
           </div>
         )}
 
-        {/* Mensajes */}
+        {/* Messages */}
         <div
           ref={scrollRef}
-          className="flex-1 space-y-5 overflow-y-auto px-4 py-5 sm:px-6"
+          className="flex-1 space-y-4 overflow-y-auto px-4 py-5 sm:px-8"
         >
-          {active?.messages.length === 0 ? (
-            <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/15 ring-1 ring-primary/25">
-                <Sparkles className="h-6 w-6 text-primary" />
+          {timeline.length === 0 ? (
+            <div className="flex h-full flex-col items-center justify-center px-4 text-center">
+              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/25 to-accent/15 ring-1 ring-primary/20">
+                <Sparkles className="h-7 w-7 text-primary" />
               </div>
-              <div>
-                <p className="text-sm font-medium text-foreground">
-                  ¿En qué te ayudo hoy?
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Escribe un mensaje o usa una sugerencia rápida
-                </p>
+              <h2 className="text-base font-semibold text-foreground">
+                ¿En qué te ayudo hoy?
+              </h2>
+              <p className="mt-1 max-w-sm text-xs text-muted-foreground">
+                Pregúntame lo que quieras, pide un PDF o usa una sugerencia.
+              </p>
+              <div className="mt-6 grid w-full max-w-md grid-cols-1 gap-2 sm:grid-cols-2">
+                {QUICK_REPLIES.map((q) => (
+                  <button
+                    key={q.label}
+                    onClick={() => sendText(q.text)}
+                    className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-3 text-left text-xs text-muted-foreground transition hover:border-primary/35 hover:bg-primary/10 hover:text-foreground"
+                  >
+                    <span className="block font-medium text-foreground/90">
+                      {q.label}
+                    </span>
+                    <span className="mt-0.5 line-clamp-1 opacity-70">
+                      {q.text}
+                    </span>
+                  </button>
+                ))}
               </div>
             </div>
           ) : (
-            active?.messages.map((m) => <MessageBubble key={m.id} msg={m} />)
+            timeline.map((item, i) =>
+              item.type === "day" ? (
+                <div key={`day-${i}`} className="flex items-center gap-3 py-2">
+                  <div className="h-px flex-1 bg-white/8" />
+                  <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                    {item.label}
+                  </span>
+                  <div className="h-px flex-1 bg-white/8" />
+                </div>
+              ) : (
+                <MessageBubble key={item.msg!.id} msg={item.msg!} />
+              ),
+            )
           )}
           {typing && <TypingBubble />}
         </div>
 
         {/* Input */}
-        <div className="border-t border-white/10 p-3 sm:p-4">
+        <div className="border-t border-white/10 bg-[#0f1117]/80 p-3 sm:p-4">
           {attachments.length > 0 && (
             <div className="mb-2 flex flex-wrap gap-2">
               {attachments.map((att, i) => (
@@ -618,7 +674,7 @@ export function ChatPanel({
             </div>
           )}
 
-          <div className="flex items-end gap-2 rounded-2xl border border-white/10 bg-white/[0.04] p-2 focus-within:border-primary/40 focus-within:ring-1 focus-within:ring-primary/20">
+          <div className="mx-auto flex max-w-3xl items-end gap-2 rounded-2xl border border-white/10 bg-white/[0.04] p-2 focus-within:border-primary/40 focus-within:ring-1 focus-within:ring-primary/20">
             <button
               onClick={() => (stt.listening ? stt.stop() : stt.start())}
               className={cn(
@@ -627,7 +683,7 @@ export function ChatPanel({
                   ? "bg-accent/20 text-accent"
                   : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
               )}
-              title={stt.listening ? "Detener" : "Micrófono"}
+              title="Micrófono"
             >
               <Mic className="h-4 w-4" />
             </button>
@@ -684,34 +740,21 @@ export function ChatPanel({
               )}
             </button>
           </div>
-
-          {active?.messages.length === 0 && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {QUICK_REPLIES.map((reply, i) => (
-                <button
-                  key={i}
-                  onClick={() => sendText(reply)}
-                  className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-muted-foreground transition hover:border-primary/30 hover:bg-primary/10 hover:text-foreground"
-                >
-                  {reply.length > 34 ? reply.slice(0, 34) + "…" : reply}
-                </button>
-              ))}
-            </div>
-          )}
+          <p className="mt-2 text-center text-[10px] text-muted-foreground/70">
+            Enter para enviar · Shift+Enter nueva línea
+          </p>
         </div>
       </div>
 
-      {/* HISTORIAL — panel superpuesto a la derecha (no aplasta el chat) */}
+      {/* Historial overlay */}
       {historyOpen && (
         <>
-          {/* Fondo click para cerrar (móvil / desktop) */}
           <button
             type="button"
-            className="absolute inset-0 z-20 bg-black/40 sm:bg-black/20"
+            className="absolute inset-0 z-20 bg-black/40"
             onClick={() => setHistoryOpen(false)}
             aria-label="Cerrar historial"
           />
-
           <aside className="absolute inset-y-0 right-0 z-30 flex w-[min(100%,20rem)] flex-col border-l border-white/10 bg-[#151821] shadow-2xl">
             <div className="flex items-center gap-2 border-b border-white/10 px-3 py-3">
               <div className="relative flex-1">
@@ -721,19 +764,17 @@ export function ChatPanel({
                   placeholder="Buscar chats..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="w-full rounded-lg border border-white/10 bg-white/5 py-2 pl-8 pr-3 text-xs outline-none placeholder:text-muted-foreground/60 focus:border-primary/40"
+                  className="w-full rounded-lg border border-white/10 bg-white/5 py-2 pl-8 pr-3 text-xs outline-none focus:border-primary/40"
                   autoFocus
                 />
               </div>
               <button
                 onClick={() => setHistoryOpen(false)}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-white/5 hover:text-foreground"
-                title="Cerrar"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-white/5"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
-
             <div className="flex-1 space-y-1 overflow-y-auto p-2">
               {filteredConversations.length === 0 ? (
                 <p className="px-2 py-6 text-center text-xs text-muted-foreground">
@@ -764,6 +805,19 @@ export function ChatPanel({
 
 function MessageBubble({ msg }: { msg: ChatMessage }) {
   const isUser = msg.role === "user";
+  const docs = !isUser ? extractDocLinks(msg.text) : [];
+
+  // Quitar URLs crudas del texto si ya mostramos botones
+  let displayText = msg.text;
+  if (docs.length) {
+    for (const d of docs) {
+      displayText = displayText.replace(d.url, "").trim();
+    }
+    displayText = displayText
+      .replace(/✅\s*PDF listo\.?\s*Descárgalo aquí:\s*/gi, "")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  }
 
   return (
     <div className={cn("flex gap-3", isUser ? "justify-end" : "justify-start")}>
@@ -775,56 +829,55 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
 
       <div
         className={cn(
-          "max-w-[min(78%,36rem)] rounded-2xl px-4 py-3 text-[13.5px] leading-relaxed",
+          "max-w-[min(78%,36rem)] space-y-2 rounded-2xl px-4 py-3 text-[13.5px] leading-relaxed",
           isUser
-            ? "rounded-br-md bg-[#ff4d9a] text-white shadow-md shadow-pink-500/20"
+            ? "rounded-br-md bg-[#ff4d9a] text-white shadow-md shadow-pink-500/15"
             : "rounded-bl-md border border-white/10 bg-[#1a1d27] text-foreground",
         )}
       >
         {isUser ? (
           <p className="whitespace-pre-wrap break-words">{msg.text}</p>
         ) : (
-          <div className="prose prose-sm dark:prose-invert max-w-none break-words prose-p:my-2 prose-a:text-sky-400">
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              components={{
-                a: ({ href, children }) => (
+          <>
+            {displayText && (
+              <div className="prose prose-sm dark:prose-invert max-w-none break-words prose-p:my-2 prose-a:text-sky-400">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {displayText}
+                </ReactMarkdown>
+              </div>
+            )}
+
+            {docs.length > 0 && (
+              <div className="flex flex-col gap-2 pt-1">
+                {docs.map((d) => (
                   <a
-                    href={href}
+                    key={d.url}
+                    href={d.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-sky-400 underline-offset-2 hover:underline"
+                    className="flex items-center gap-3 rounded-xl border border-primary/25 bg-primary/10 px-3 py-2.5 text-xs transition hover:bg-primary/20"
                   >
-                    {children}
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/20">
+                      <FileText className="h-4 w-4 text-primary" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium text-foreground">
+                        Documento listo
+                      </div>
+                      <div className="truncate text-[10px] text-muted-foreground">
+                        {d.label}
+                      </div>
+                    </div>
+                    <Download className="h-4 w-4 shrink-0 text-primary" />
                   </a>
-                ),
-                code: ({ className, children, ...props }: any) => {
-                  const isBlock = Boolean(className);
-                  if (!isBlock) {
-                    return (
-                      <code className="rounded bg-white/10 px-1 py-0.5" {...props}>
-                        {children}
-                      </code>
-                    );
-                  }
-                  return (
-                    <code
-                      className="block overflow-x-auto rounded-lg bg-black/30 p-3 text-xs"
-                      {...props}
-                    >
-                      {children}
-                    </code>
-                  );
-                },
-              }}
-            >
-              {msg.text}
-            </ReactMarkdown>
-          </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
 
         {msg.attachments && msg.attachments.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1.5">
+          <div className="mt-1 flex flex-wrap gap-1.5">
             {msg.attachments.map((att, i) => (
               <div
                 key={i}
@@ -930,7 +983,6 @@ function ConversationRow({
                 setEditing(true);
               }}
               className="rounded-md p-1 hover:bg-white/10"
-              title="Renombrar"
             >
               <Pencil className="h-3 w-3" />
             </button>
@@ -940,7 +992,6 @@ function ConversationRow({
                 onDelete();
               }}
               className="rounded-md p-1 hover:bg-white/10"
-              title="Eliminar"
             >
               <Trash2 className="h-3 w-3" />
             </button>
