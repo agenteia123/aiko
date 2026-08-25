@@ -1,5 +1,3 @@
-// Productivity suite — Todos, Reminders, Calendar/Agenda, Habits, Notes.
-// Each sub-tab is intentionally compact and keyboard-friendly.
 import { useEffect, useMemo, useState } from "react";
 import {
   Bell,
@@ -31,7 +29,6 @@ import { requestNotificationPermission } from "@/lib/useReminders";
 import { gainXP } from "@/lib/affection";
 import { sfx } from "@/lib/sfx";
 
-
 type Sub = "todo" | "reminders" | "agenda" | "habits" | "notes";
 
 const SUBS: { id: Sub; label: string; icon: typeof ListTodo }[] = [
@@ -46,16 +43,17 @@ export function ProductivityPanel() {
   const [sub, setSub] = useState<Sub>("todo");
 
   return (
-    <div className="glass-panel flex h-full flex-col overflow-hidden rounded-2xl">
-      <header className="border-b border-white/5 px-5 py-4">
-        <h2 className="font-display text-lg font-semibold text-glow-pink">
+    <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#12141c]/95 shadow-xl">
+      <header className="shrink-0 border-b border-white/10 px-5 py-4">
+        <h2 className="text-base font-semibold tracking-tight text-foreground">
           Productividad
         </h2>
-        <p className="text-xs text-muted-foreground">
-          Aiko te ayuda a ordenar tu día, Ale 💗
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          Ordena tu día con Aiko
         </p>
       </header>
-      <nav className="flex gap-1 overflow-x-auto border-b border-white/5 px-3 py-2">
+
+      <nav className="flex gap-1 overflow-x-auto border-b border-white/10 px-3 py-2">
         {SUBS.map((s) => {
           const Icon = s.icon;
           const active = s.id === sub;
@@ -64,24 +62,22 @@ export function ProductivityPanel() {
               key={s.id}
               onClick={() => setSub(s.id)}
               className={cn(
-                "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs transition",
+                "flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs transition",
                 active
-                  ? "bg-primary/15 text-foreground"
+                  ? "bg-primary/15 text-foreground ring-1 ring-primary/25"
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
               <Icon
-                className={cn(
-                  "h-3.5 w-3.5",
-                  active ? "text-primary" : "text-accent",
-                )}
+                className={cn("h-3.5 w-3.5", active ? "text-primary" : "")}
               />
               {s.label}
             </button>
           );
         })}
       </nav>
-      <div className="flex-1 overflow-y-auto p-4">
+
+      <div className="flex-1 overflow-y-auto p-4 sm:p-5">
         {sub === "todo" && <TodoSection />}
         {sub === "reminders" && <RemindersSection />}
         {sub === "agenda" && <AgendaSection />}
@@ -124,19 +120,19 @@ function TodoSection() {
   const openCount = items.filter((t) => !t.done).length;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <div className="flex gap-2">
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && add()}
           placeholder="Nueva tarea..."
-          className="glass-panel flex-1 rounded-lg bg-transparent px-3 py-2 text-sm outline-none"
+          className="min-w-0 flex-1 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-sm outline-none focus:border-primary/40"
         />
         <select
           value={priority}
           onChange={(e) => setPriority(e.target.value as Priority)}
-          className="glass-panel rounded-lg bg-transparent px-2 text-xs outline-none"
+          className="rounded-xl border border-white/10 bg-white/[0.04] px-2 text-xs outline-none"
           title="Prioridad"
         >
           <option value="low">Baja</option>
@@ -145,23 +141,27 @@ function TodoSection() {
         </select>
         <button
           onClick={add}
-          className="rounded-lg bg-primary px-3 text-sm text-primary-foreground neon-pink"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md shadow-primary/20"
           aria-label="Agregar"
         >
           <Plus className="h-4 w-4" />
         </button>
       </div>
 
-      <div className="flex items-center justify-between text-[10px] uppercase tracking-widest text-muted-foreground">
-        <span>{openCount} pendientes</span>
-        <div className="flex gap-1">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+          {openCount} pendientes
+        </span>
+        <div className="flex gap-1 rounded-lg bg-white/5 p-0.5">
           {(["open", "all", "done"] as const).map((f) => (
             <button
               key={f}
               onClick={() => setFilter(f)}
               className={cn(
-                "rounded px-2 py-1",
-                filter === f ? "bg-primary/15 text-foreground" : "hover:text-foreground",
+                "rounded-md px-2.5 py-1 text-[10px] uppercase tracking-wide transition",
+                filter === f
+                  ? "bg-primary/20 text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
               )}
             >
               {f === "open" ? "Activas" : f === "done" ? "Hechas" : "Todas"}
@@ -174,7 +174,7 @@ function TodoSection() {
         {visible.map((t) => (
           <li
             key={t.id}
-            className="glass-panel group flex items-center gap-2 rounded-lg px-3 py-2 text-sm"
+            className="group flex items-center gap-2.5 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2.5 text-sm"
           >
             <button
               onClick={() => {
@@ -185,10 +185,11 @@ function TodoSection() {
                   sfx.click();
                 }
                 setItems((x) =>
-                  x.map((it) => (it.id === t.id ? { ...it, done: !it.done } : it)),
+                  x.map((it) =>
+                    it.id === t.id ? { ...it, done: !it.done } : it,
+                  ),
                 );
               }}
-
               className={cn(
                 "flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition",
                 t.done
@@ -201,7 +202,7 @@ function TodoSection() {
             </button>
             <span
               className={cn(
-                "flex-1 truncate",
+                "min-w-0 flex-1 truncate",
                 t.done && "text-muted-foreground line-through",
               )}
             >
@@ -210,17 +211,15 @@ function TodoSection() {
             <PriorityDot p={t.priority} />
             <button
               onClick={() => setItems((x) => x.filter((it) => it.id !== t.id))}
-              className="opacity-0 transition group-hover:opacity-100"
+              className="rounded-md p-1 text-muted-foreground opacity-0 transition hover:text-destructive group-hover:opacity-100"
               aria-label="Eliminar"
             >
-              <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
+              <Trash2 className="h-3.5 w-3.5" />
             </button>
           </li>
         ))}
         {visible.length === 0 && (
-          <li className="rounded-lg border border-dashed border-white/10 px-3 py-6 text-center text-xs text-muted-foreground">
-            Sin tareas por aquí. Aiko está orgullosa de ti ✨
-          </li>
+          <Empty>Sin tareas por aquí. Aiko está orgullosa ✨</Empty>
         )}
       </ul>
     </div>
@@ -234,7 +233,9 @@ function PriorityDot({ p }: { p: Priority }) {
       : p === "med"
         ? "bg-primary"
         : "bg-accent/60";
-  return <span className={cn("h-2 w-2 rounded-full", c)} title={`Prioridad ${p}`} />;
+  return (
+    <span className={cn("h-2 w-2 shrink-0 rounded-full", c)} title={`Prioridad ${p}`} />
+  );
 }
 
 /* ------------------------------ Reminders ------------------------------ */
@@ -276,37 +277,37 @@ function RemindersSection() {
   const past = items.filter((r) => r.fired);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {perm !== "granted" && (
         <button
           onClick={async () => {
             const p = await Notification.requestPermission();
             setPerm(p);
           }}
-          className="glass-panel flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs text-accent hover:bg-white/5"
+          className="flex w-full items-center gap-2 rounded-xl border border-accent/25 bg-accent/10 px-3 py-2.5 text-xs text-accent transition hover:bg-accent/15"
         >
           <BellPlus className="h-4 w-4" /> Activar notificaciones de escritorio
         </button>
       )}
+
       <div className="space-y-2">
         <input
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="¿Qué te recuerdo?"
-          className="glass-panel w-full rounded-lg bg-transparent px-3 py-2 text-sm outline-none"
+          className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-sm outline-none focus:border-primary/40"
         />
         <div className="flex gap-2">
           <input
             type="datetime-local"
             value={when}
             onChange={(e) => setWhen(e.target.value)}
-            className="glass-panel flex-1 rounded-lg bg-transparent px-3 py-2 text-xs outline-none"
+            className="min-w-0 flex-1 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs outline-none"
           />
           <select
             value={repeat}
             onChange={(e) => setRepeat(e.target.value as Reminder["repeat"])}
-            className="glass-panel rounded-lg bg-transparent px-2 text-xs outline-none"
-            title="Repetición"
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-2 text-xs outline-none"
           >
             <option value="none">Una vez</option>
             <option value="daily">Diario</option>
@@ -314,8 +315,8 @@ function RemindersSection() {
           </select>
           <button
             onClick={add}
-            className="rounded-lg bg-primary px-3 text-sm text-primary-foreground neon-pink"
-            aria-label="Agregar recordatorio"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground"
+            aria-label="Agregar"
           >
             <Plus className="h-4 w-4" />
           </button>
@@ -326,11 +327,11 @@ function RemindersSection() {
         {upcoming.map((r) => (
           <li
             key={r.id}
-            className="glass-panel group flex items-center gap-2 rounded-lg px-3 py-2 text-sm"
+            className="group flex items-center gap-2.5 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2.5 text-sm"
           >
-            <Bell className="h-3.5 w-3.5 text-accent" />
+            <Bell className="h-3.5 w-3.5 shrink-0 text-accent" />
             <div className="min-w-0 flex-1">
-              <div className="truncate">{r.text}</div>
+              <div className="truncate text-foreground">{r.text}</div>
               <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
                 {new Date(r.at).toLocaleString()}
                 {r.repeat !== "none" && (
@@ -343,10 +344,9 @@ function RemindersSection() {
             </div>
             <button
               onClick={() => setItems((x) => x.filter((it) => it.id !== r.id))}
-              className="opacity-0 transition group-hover:opacity-100"
-              aria-label="Eliminar"
+              className="rounded-md p-1 text-muted-foreground opacity-0 transition hover:text-destructive group-hover:opacity-100"
             >
-              <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
+              <Trash2 className="h-3.5 w-3.5" />
             </button>
           </li>
         ))}
@@ -358,12 +358,11 @@ function RemindersSection() {
           {past.slice(0, 5).map((r) => (
             <li
               key={r.id}
-              className="glass-panel group flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs text-muted-foreground"
+              className="group flex items-center gap-2 rounded-xl border border-white/5 bg-white/[0.01] px-3 py-2 text-xs text-muted-foreground"
             >
-              <span className="flex-1 truncate">{r.text}</span>
+              <span className="min-w-0 flex-1 truncate">{r.text}</span>
               <button
                 onClick={() => setItems((x) => x.filter((it) => it.id !== r.id))}
-                aria-label="Eliminar"
               >
                 <Trash2 className="h-3 w-3 hover:text-destructive" />
               </button>
@@ -406,31 +405,30 @@ function AgendaSection() {
   }, [items]);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <div className="space-y-2">
         <input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="Título del evento"
-          className="glass-panel w-full rounded-lg bg-transparent px-3 py-2 text-sm outline-none"
+          className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-sm outline-none focus:border-primary/40"
         />
         <div className="flex gap-2">
           <input
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            className="glass-panel flex-1 rounded-lg bg-transparent px-3 py-2 text-xs outline-none"
+            className="min-w-0 flex-1 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs outline-none"
           />
           <input
             type="time"
             value={time}
             onChange={(e) => setTime(e.target.value)}
-            className="glass-panel w-28 rounded-lg bg-transparent px-3 py-2 text-xs outline-none"
+            className="w-28 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs outline-none"
           />
           <button
             onClick={add}
-            className="rounded-lg bg-primary px-3 text-sm text-primary-foreground neon-pink"
-            aria-label="Agregar evento"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground"
           >
             <Plus className="h-4 w-4" />
           </button>
@@ -440,9 +438,10 @@ function AgendaSection() {
       {grouped.length === 0 && (
         <Empty>Tu agenda de las próximas 2 semanas está libre.</Empty>
       )}
+
       {grouped.map(([d, evts]) => (
         <div key={d}>
-          <div className="mb-1 text-[10px] uppercase tracking-widest text-muted-foreground">
+          <div className="mb-1.5 text-[10px] uppercase tracking-widest text-muted-foreground">
             {formatDay(d)}
           </div>
           <ul className="space-y-1.5">
@@ -451,19 +450,20 @@ function AgendaSection() {
               .map((e) => (
                 <li
                   key={e.id}
-                  className="glass-panel group flex items-center gap-2 rounded-lg px-3 py-2 text-sm"
+                  className="group flex items-center gap-2.5 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2.5 text-sm"
                 >
-                  <CalendarDays className="h-3.5 w-3.5 text-accent" />
-                  <span className="flex-1 truncate">{e.title}</span>
+                  <CalendarDays className="h-3.5 w-3.5 shrink-0 text-accent" />
+                  <span className="min-w-0 flex-1 truncate">{e.title}</span>
                   {e.time && (
                     <span className="text-xs text-muted-foreground">{e.time}</span>
                   )}
                   <button
-                    onClick={() => setItems((x) => x.filter((it) => it.id !== e.id))}
-                    className="opacity-0 transition group-hover:opacity-100"
-                    aria-label="Eliminar"
+                    onClick={() =>
+                      setItems((x) => x.filter((it) => it.id !== e.id))
+                    }
+                    className="rounded-md p-1 text-muted-foreground opacity-0 transition hover:text-destructive group-hover:opacity-100"
                   >
-                    <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
+                    <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </li>
               ))}
@@ -524,7 +524,9 @@ function HabitsSection() {
         if (!has) awarded = true;
         return {
           ...h,
-          checks: has ? h.checks.filter((d) => d !== today) : [...h.checks, today],
+          checks: has
+            ? h.checks.filter((d) => d !== today)
+            : [...h.checks, today],
         };
       }),
     );
@@ -536,25 +538,24 @@ function HabitsSection() {
     }
   }
 
-
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <div className="flex gap-2">
         <input
           value={emoji}
           onChange={(e) => setEmoji(e.target.value.slice(0, 2))}
-          className="glass-panel w-12 rounded-lg bg-transparent px-2 py-2 text-center text-sm outline-none"
+          className="w-12 rounded-xl border border-white/10 bg-white/[0.04] px-2 py-2.5 text-center text-sm outline-none"
         />
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && add()}
           placeholder="Nuevo hábito (ej. Leer 20 min)"
-          className="glass-panel flex-1 rounded-lg bg-transparent px-3 py-2 text-sm outline-none"
+          className="min-w-0 flex-1 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-sm outline-none focus:border-primary/40"
         />
         <button
           onClick={add}
-          className="rounded-lg bg-primary px-3 text-sm text-primary-foreground neon-pink"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground"
         >
           <Plus className="h-4 w-4" />
         </button>
@@ -568,14 +569,14 @@ function HabitsSection() {
           return (
             <li
               key={h.id}
-              className="glass-panel group flex items-center gap-3 rounded-lg px-3 py-2 text-sm"
+              className="group flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2.5 text-sm"
             >
               <button
                 onClick={() => toggleToday(h.id)}
                 className={cn(
-                  "flex h-8 w-8 items-center justify-center rounded-lg text-lg transition",
+                  "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-lg transition",
                   doneToday
-                    ? "bg-primary text-primary-foreground neon-pink"
+                    ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
                     : "bg-white/5 hover:bg-white/10",
                 )}
                 aria-label="Marcar hoy"
@@ -583,7 +584,7 @@ function HabitsSection() {
                 {h.emoji || "✨"}
               </button>
               <div className="min-w-0 flex-1">
-                <div className="truncate">{h.name}</div>
+                <div className="truncate text-foreground">{h.name}</div>
                 <div className="flex items-center gap-1 text-[10px] uppercase tracking-widest text-muted-foreground">
                   <Flame
                     className={cn(
@@ -597,16 +598,15 @@ function HabitsSection() {
               <HabitDots checks={h.checks} />
               <button
                 onClick={() => setItems((x) => x.filter((it) => it.id !== h.id))}
-                className="opacity-0 transition group-hover:opacity-100"
-                aria-label="Eliminar"
+                className="rounded-md p-1 text-muted-foreground opacity-0 transition hover:text-destructive group-hover:opacity-100"
               >
-                <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
+                <Trash2 className="h-3.5 w-3.5" />
               </button>
             </li>
           );
         })}
         {items.length === 0 && (
-          <Empty>Añade un hábito y vamos por él, Ale 🔥</Empty>
+          <Empty>Añade un hábito y vamos por él 🔥</Empty>
         )}
       </ul>
     </div>
@@ -618,7 +618,10 @@ function HabitDots({ checks }: { checks: string[] }) {
   const days = Array.from({ length: 7 }, (_, i) => {
     const d = new Date();
     d.setDate(d.getDate() - (6 - i));
-    return { iso: todayISO(d), label: d.toLocaleDateString(undefined, { weekday: "narrow" }) };
+    return {
+      iso: todayISO(d),
+      label: d.toLocaleDateString(undefined, { weekday: "narrow" }),
+    };
   });
   return (
     <div className="flex gap-0.5">
@@ -640,7 +643,9 @@ function HabitDots({ checks }: { checks: string[] }) {
 
 function NotesSection() {
   const [items, setItems] = useState<Note[]>(() => store.loadNotes());
-  const [activeId, setActiveId] = useState<string | null>(() => items[0]?.id ?? null);
+  const [activeId, setActiveId] = useState<string | null>(
+    () => items[0]?.id ?? null,
+  );
   useEffect(() => store.saveNotes(items), [items]);
 
   const active = items.find((n) => n.id === activeId) ?? null;
@@ -656,11 +661,11 @@ function NotesSection() {
     setActiveId(n.id);
   }
 
-  function patch(patch: Partial<Note>) {
+  function patch(p: Partial<Note>) {
     if (!active) return;
     setItems((x) =>
       x.map((n) =>
-        n.id === active.id ? { ...n, ...patch, updatedAt: Date.now() } : n,
+        n.id === active.id ? { ...n, ...p, updatedAt: Date.now() } : n,
       ),
     );
   }
@@ -672,10 +677,10 @@ function NotesSection() {
 
   return (
     <div className="flex h-full min-h-[380px] gap-3">
-      <div className="flex w-40 flex-col gap-2">
+      <div className="flex w-40 shrink-0 flex-col gap-2">
         <button
           onClick={create}
-          className="flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs text-primary-foreground neon-pink"
+          className="flex items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2 text-xs font-medium text-primary-foreground shadow-md shadow-primary/20"
         >
           <Plus className="h-3.5 w-3.5" /> Nueva
         </button>
@@ -685,13 +690,15 @@ function NotesSection() {
               <button
                 onClick={() => setActiveId(n.id)}
                 className={cn(
-                  "flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-xs transition",
+                  "flex w-full items-center gap-1.5 rounded-lg px-2 py-2 text-left text-xs transition",
                   activeId === n.id
-                    ? "bg-primary/15 text-foreground"
+                    ? "bg-primary/15 text-foreground ring-1 ring-primary/25"
                     : "text-muted-foreground hover:bg-white/5",
                 )}
               >
-                {n.pinned && <Pin className="h-3 w-3 shrink-0 text-primary" />}
+                {n.pinned && (
+                  <Pin className="h-3 w-3 shrink-0 text-primary" />
+                )}
                 <span className="truncate">{n.title || "Sin título"}</span>
               </button>
             </li>
@@ -704,18 +711,18 @@ function NotesSection() {
         </ul>
       </div>
 
-      <div className="flex flex-1 flex-col gap-2">
+      <div className="flex min-w-0 flex-1 flex-col gap-2">
         {active ? (
           <>
             <div className="flex gap-2">
               <input
                 value={active.title}
                 onChange={(e) => patch({ title: e.target.value })}
-                className="glass-panel flex-1 rounded-lg bg-transparent px-3 py-2 text-sm outline-none"
+                className="min-w-0 flex-1 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm outline-none focus:border-primary/40"
               />
               <button
                 onClick={() => patch({ pinned: !active.pinned })}
-                className="glass-panel rounded-lg px-2 text-muted-foreground hover:text-foreground"
+                className="rounded-xl border border-white/10 px-2.5 text-muted-foreground transition hover:text-foreground"
                 title={active.pinned ? "Desfijar" : "Fijar"}
               >
                 {active.pinned ? (
@@ -729,8 +736,7 @@ function NotesSection() {
                   setItems((x) => x.filter((n) => n.id !== active.id));
                   setActiveId(null);
                 }}
-                className="glass-panel rounded-lg px-2 text-muted-foreground hover:text-destructive"
-                aria-label="Eliminar nota"
+                className="rounded-xl border border-white/10 px-2.5 text-muted-foreground transition hover:text-destructive"
               >
                 <Trash2 className="h-4 w-4" />
               </button>
@@ -738,15 +744,15 @@ function NotesSection() {
             <textarea
               value={active.body}
               onChange={(e) => patch({ body: e.target.value })}
-              placeholder="Escribe aquí. Aiko no leerá si no le pides..."
-              className="glass-panel flex-1 resize-none rounded-lg bg-transparent p-3 text-sm outline-none"
+              placeholder="Escribe aquí..."
+              className="min-h-[200px] flex-1 resize-none rounded-xl border border-white/10 bg-white/[0.04] p-3 text-sm outline-none focus:border-primary/40"
             />
             <div className="text-right text-[10px] uppercase tracking-widest text-muted-foreground">
               Guardado · {new Date(active.updatedAt).toLocaleString()}
             </div>
           </>
         ) : (
-          <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed border-white/10 text-xs text-muted-foreground">
+          <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-white/10 text-xs text-muted-foreground">
             Selecciona o crea una nota
           </div>
         )}
@@ -766,7 +772,7 @@ function Section({
 }) {
   return (
     <div>
-      <div className="mb-1 text-[10px] uppercase tracking-widest text-muted-foreground">
+      <div className="mb-1.5 text-[10px] uppercase tracking-widest text-muted-foreground">
         {title}
       </div>
       <ul className="space-y-1.5">{children}</ul>
@@ -776,11 +782,10 @@ function Section({
 
 function Empty({ children }: { children: React.ReactNode }) {
   return (
-    <li className="rounded-lg border border-dashed border-white/10 px-3 py-6 text-center text-xs text-muted-foreground">
+    <li className="list-none rounded-xl border border-dashed border-white/10 px-3 py-8 text-center text-xs text-muted-foreground">
       {children}
     </li>
   );
 }
 
-// Re-export so index can wire it up next to the other panels.
 export { requestNotificationPermission };

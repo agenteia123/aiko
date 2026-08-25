@@ -12,7 +12,11 @@ import {
   Camera,
   FileUp,
   MoonStar,
+  CornerDownLeft,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export interface Command {
   id: string;
@@ -29,10 +33,15 @@ interface CommandPaletteProps {
   commands: Command[];
 }
 
-export function CommandPalette({ open, onClose, commands }: CommandPaletteProps) {
+export function CommandPalette({
+  open,
+  onClose,
+  commands,
+}: CommandPaletteProps) {
   const [q, setQ] = useState("");
   const [idx, setIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
 
   useEffect(() => {
     if (open) {
@@ -46,13 +55,23 @@ export function CommandPalette({ open, onClose, commands }: CommandPaletteProps)
     const s = q.trim().toLowerCase();
     if (!s) return commands;
     return commands.filter((c) =>
-      `${c.label} ${c.hint ?? ""} ${c.keywords ?? ""}`.toLowerCase().includes(s),
+      `${c.label} ${c.hint ?? ""} ${c.keywords ?? ""}`
+        .toLowerCase()
+        .includes(s),
     );
   }, [q, commands]);
 
   useEffect(() => {
     if (idx >= filtered.length) setIdx(0);
   }, [filtered, idx]);
+
+  // Scroll item activo a la vista
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const el = list.children[idx] as HTMLElement | undefined;
+    el?.scrollIntoView({ block: "nearest" });
+  }, [idx]);
 
   if (!open) return null;
 
@@ -77,29 +96,35 @@ export function CommandPalette({ open, onClose, commands }: CommandPaletteProps)
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 px-4 pt-[15vh] backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-start justify-center bg-black/55 px-4 pt-[12vh] backdrop-blur-sm"
       onClick={onClose}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="glass-panel w-full max-w-lg overflow-hidden rounded-2xl border border-white/10 shadow-2xl"
+        className="w-full max-w-lg overflow-hidden rounded-2xl border border-white/10 bg-[#14161f] shadow-2xl shadow-black/50"
         style={{ animation: "aiko-fade-in 0.14s ease-out" }}
       >
-        <div className="flex items-center gap-2 border-b border-white/5 px-4 py-3">
-          <Search className="h-4 w-4 text-accent" />
+        {/* Search */}
+        <div className="flex items-center gap-3 border-b border-white/10 px-4 py-3.5">
+          <Search className="h-4 w-4 shrink-0 text-primary" />
           <input
             ref={inputRef}
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={(e) => {
+              setQ(e.target.value);
+              setIdx(0);
+            }}
             onKeyDown={onKey}
-            placeholder="Escribe un comando o busca…"
-            className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/70"
+            placeholder="Buscar comando o acción…"
+            className="flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/60"
           />
-          <kbd className="rounded bg-white/5 px-1.5 py-0.5 text-[10px] uppercase tracking-widest text-muted-foreground">
+          <kbd className="hidden rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] uppercase tracking-widest text-muted-foreground sm:inline">
             Esc
           </kbd>
         </div>
-        <ul className="max-h-[50vh] overflow-y-auto py-1">
+
+        {/* Results */}
+        <ul ref={listRef} className="max-h-[min(50vh,22rem)] overflow-y-auto py-1.5">
           {filtered.map((c, i) => {
             const Icon = c.icon;
             const active = i === idx;
@@ -111,36 +136,69 @@ export function CommandPalette({ open, onClose, commands }: CommandPaletteProps)
                     onClose();
                     setTimeout(() => c.run(), 0);
                   }}
-                  className={`flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm transition ${
-                    active ? "bg-primary/15 text-foreground" : "text-muted-foreground"
-                  }`}
+                  className={cn(
+                    "flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm transition",
+                    active
+                      ? "bg-primary/15 text-foreground"
+                      : "text-muted-foreground hover:bg-white/[0.03]",
+                  )}
                 >
-                  <Icon className={`h-4 w-4 ${active ? "text-primary" : "text-accent"}`} />
-                  <span className="flex-1">{c.label}</span>
+                  <div
+                    className={cn(
+                      "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+                      active
+                        ? "bg-primary/20 text-primary"
+                        : "bg-white/5 text-accent",
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  <span className="min-w-0 flex-1 truncate font-medium">
+                    {c.label}
+                  </span>
                   {c.hint && (
-                    <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                    <span className="hidden shrink-0 text-[10px] uppercase tracking-widest text-muted-foreground sm:inline">
                       {c.hint}
                     </span>
+                  )}
+                  {active && (
+                    <CornerDownLeft className="h-3.5 w-3.5 shrink-0 text-primary/80" />
                   )}
                 </button>
               </li>
             );
           })}
+
           {filtered.length === 0 && (
-            <li className="px-4 py-6 text-center text-xs text-muted-foreground">
-              Nada por aquí, Ale.
+            <li className="px-4 py-10 text-center">
+              <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-white/5">
+                <Search className="h-4 w-4 text-muted-foreground" />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Nada coincide con “{q}”
+              </p>
             </li>
           )}
         </ul>
-        <div className="border-t border-white/5 bg-white/[0.02] px-4 py-2 text-[10px] uppercase tracking-widest text-muted-foreground">
-          ↑ ↓ para navegar · ↵ para ejecutar
+
+        {/* Footer */}
+        <div className="flex items-center gap-4 border-t border-white/10 bg-white/[0.02] px-4 py-2.5 text-[10px] uppercase tracking-widest text-muted-foreground">
+          <span className="inline-flex items-center gap-1">
+            <ArrowUp className="h-3 w-3" />
+            <ArrowDown className="h-3 w-3" />
+            navegar
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <CornerDownLeft className="h-3 w-3" />
+            ejecutar
+          </span>
+          <span className="ml-auto">Esc cerrar</span>
         </div>
       </div>
     </div>
   );
 }
 
-// Handy default icons re-export for callers building commands.
 export const CommandIcons = {
   Search,
   Sparkles,

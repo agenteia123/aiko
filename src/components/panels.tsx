@@ -23,6 +23,7 @@ import {
   Scale,
   Telescope,
   Heart,
+  Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTheme, type ThemeMode } from "@/lib/useTheme";
@@ -34,6 +35,109 @@ import {
 import { isSfxEnabled, setSfxEnabled, sfx } from "@/lib/sfx";
 import { useAffection } from "@/lib/affection";
 
+/* -------------------------------- Shell -------------------------------- */
+
+function PanelShell({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#12141c]/95 shadow-xl">
+      <header className="shrink-0 border-b border-white/10 px-5 py-4">
+        <h2 className="text-base font-semibold tracking-tight text-foreground">
+          {title}
+        </h2>
+        <p className="mt-0.5 text-xs text-muted-foreground">{subtitle}</p>
+      </header>
+      <div className="flex-1 space-y-5 overflow-y-auto p-5">{children}</div>
+    </div>
+  );
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="mb-2 text-[10px] font-medium uppercase tracking-widest text-muted-foreground/80">
+      {children}
+    </div>
+  );
+}
+
+function Row({
+  label,
+  description,
+  children,
+}: {
+  label: string;
+  description?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-2">
+      <div>
+        <div className="text-xs font-medium text-foreground">{label}</div>
+        {description && (
+          <p className="mt-0.5 text-[11px] text-muted-foreground">{description}</p>
+        )}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function Hint({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-3 text-xs leading-relaxed text-muted-foreground">
+      {children}
+    </div>
+  );
+}
+
+function CardButton({
+  active,
+  onClick,
+  icon: Icon,
+  label,
+  desc,
+}: {
+  active?: boolean;
+  onClick: () => void;
+  icon: typeof Heart;
+  label: string;
+  desc?: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "flex items-start gap-3 rounded-xl border px-3.5 py-3 text-left transition",
+        active
+          ? "border-primary/40 bg-primary/10 text-foreground ring-1 ring-primary/20"
+          : "border-white/10 bg-white/[0.02] text-muted-foreground hover:border-white/15 hover:bg-white/[0.04] hover:text-foreground",
+      )}
+    >
+      <div
+        className={cn(
+          "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+          active ? "bg-primary/20 text-primary" : "bg-white/5 text-accent",
+        )}
+      >
+        <Icon className="h-4 w-4" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="text-sm font-medium text-foreground">{label}</div>
+        {desc && (
+          <div className="mt-0.5 text-[11px] text-muted-foreground">{desc}</div>
+        )}
+      </div>
+      {active && <Check className="mt-1 h-4 w-4 shrink-0 text-primary" />}
+    </button>
+  );
+}
 
 /* -------------------------------- Voice -------------------------------- */
 
@@ -67,7 +171,8 @@ export function VoicePanel({
     window.speechSynthesis.onvoiceschanged = load;
   }, []);
 
-  const feminineHints = /(mónica|monica|paulina|marisol|helena|sofia|lucia|elena|female|mujer)/i;
+  const feminineHints =
+    /(mónica|monica|paulina|marisol|helena|sofia|lucia|elena|female|mujer)/i;
   const sorted = [...voices].sort((a, b) => {
     const score = (v: SpeechSynthesisVoice) => {
       const es = v.lang.toLowerCase().startsWith("es") ? 0 : 2;
@@ -78,12 +183,15 @@ export function VoicePanel({
   });
 
   return (
-    <PanelShell title="Voz" subtitle="Aiko habla con voz mimada y madura">
-      <Row label="Voz TTS (recomendadas primero)">
+    <PanelShell
+      title="Voz"
+      subtitle="Cómo suena Aiko cuando te responde"
+    >
+      <Row label="Voz del sistema" description="Se priorizan voces en español">
         <select
           value={voiceURI ?? ""}
           onChange={(e) => setVoiceURI(e.target.value || null)}
-          className="glass-panel w-full rounded-lg bg-transparent px-3 py-2 text-sm outline-none"
+          className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-sm outline-none focus:border-primary/40"
         >
           <option value="">Automática (femenina · español)</option>
           {sorted.map((v) => (
@@ -94,6 +202,7 @@ export function VoicePanel({
           ))}
         </select>
       </Row>
+
       <Row label={`Velocidad · ${rate.toFixed(2)}x`}>
         <input
           type="range"
@@ -105,6 +214,7 @@ export function VoicePanel({
           className="w-full accent-primary"
         />
       </Row>
+
       <Row label={`Tono · ${pitch.toFixed(2)}`}>
         <input
           type="range"
@@ -116,6 +226,7 @@ export function VoicePanel({
           className="w-full accent-primary"
         />
       </Row>
+
       <Row label={`Volumen · ${Math.round(volume * 100)}%`}>
         <input
           type="range"
@@ -127,15 +238,17 @@ export function VoicePanel({
           className="w-full accent-primary"
         />
       </Row>
+
       <button
         onClick={onPreview}
-        className="mt-2 flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground neon-pink"
+        className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground shadow-md shadow-primary/20 transition hover:opacity-95"
       >
-        <Volume2 className="h-4 w-4" /> Escuchar a Aiko
+        <Volume2 className="h-4 w-4" /> Escuchar vista previa
       </button>
+
       <Hint>
-        Para voz anime realmente expresiva (Piper/Coqui/ElevenLabs), conecta
-        tu backend Python. Este panel ya guarda tus preferencias.
+        Para voz más natural (Piper, ElevenLabs, etc.) se conecta desde el
+        backend. Este panel guarda tus preferencias locales.
       </Hint>
     </PanelShell>
   );
@@ -144,11 +257,41 @@ export function VoicePanel({
 /* -------------------------------- Models -------------------------------- */
 
 const PROVIDERS = [
-  { id: "ollama", label: "Ollama (local)", icon: HardDrive, models: ["llama3.1", "qwen2.5", "mistral"] },
-  { id: "openai", label: "OpenAI", icon: Cloud, models: ["gpt-5.5", "gpt-5-mini"] },
-  { id: "anthropic", label: "Claude", icon: Cloud, models: ["claude-sonnet-4", "claude-haiku-4"] },
-  { id: "google", label: "Gemini", icon: Cloud, models: ["gemini-3-pro", "gemini-3-flash"] },
-  { id: "xai", label: "Grok", icon: Cloud, models: ["grok-4"] },
+  {
+    id: "ollama",
+    label: "Ollama",
+    desc: "Local · sin internet",
+    icon: HardDrive,
+    models: ["llama3.1", "qwen2.5", "mistral"],
+  },
+  {
+    id: "openai",
+    label: "OpenAI",
+    desc: "GPT en la nube",
+    icon: Cloud,
+    models: ["gpt-4o", "gpt-4o-mini"],
+  },
+  {
+    id: "anthropic",
+    label: "Claude",
+    desc: "Anthropic",
+    icon: Cloud,
+    models: ["claude-sonnet-4", "claude-haiku-4"],
+  },
+  {
+    id: "google",
+    label: "Gemini",
+    desc: "Google AI",
+    icon: Cloud,
+    models: ["gemini-2.0-flash", "gemini-1.5-pro"],
+  },
+  {
+    id: "xai",
+    label: "Grok",
+    desc: "xAI",
+    icon: Cloud,
+    models: ["grok-2"],
+  },
 ];
 
 export function ModelsPanel({
@@ -163,37 +306,36 @@ export function ModelsPanel({
   setModel: (v: string) => void;
 }) {
   const current = PROVIDERS.find((p) => p.id === provider) ?? PROVIDERS[0];
+
   return (
-    <PanelShell title="Modelos AI" subtitle="Elige el cerebro de Aiko — online u offline">
-      <div className="grid grid-cols-2 gap-2">
-        {PROVIDERS.map((p) => {
-          const Icon = p.icon;
-          const active = provider === p.id;
-          return (
-            <button
+    <PanelShell
+      title="Modelos AI"
+      subtitle="Preferencia de proveedor (la lógica real está en el backend)"
+    >
+      <div>
+        <SectionLabel>Proveedor</SectionLabel>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {PROVIDERS.map((p) => (
+            <CardButton
               key={p.id}
+              active={provider === p.id}
               onClick={() => {
                 setProvider(p.id);
                 setModel(p.models[0]);
               }}
-              className={`glass-panel flex items-center gap-2 rounded-xl px-3 py-3 text-left text-sm transition ${
-                active
-                  ? "border-primary/50 text-foreground neon-pink"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <Icon className={`h-4 w-4 ${active ? "text-primary" : "text-accent"}`} />
-              {p.label}
-            </button>
-          );
-        })}
+              icon={p.icon}
+              label={p.label}
+              desc={p.desc}
+            />
+          ))}
+        </div>
       </div>
 
-      <Row label="Modelo">
+      <Row label="Modelo" description={`Opciones de ${current.label}`}>
         <select
           value={model}
           onChange={(e) => setModel(e.target.value)}
-          className="glass-panel w-full rounded-lg bg-transparent px-3 py-2 text-sm outline-none"
+          className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-sm outline-none focus:border-primary/40"
         >
           {current.models.map((m) => (
             <option key={m} value={m}>
@@ -203,11 +345,16 @@ export function ModelsPanel({
         </select>
       </Row>
 
-      <div className="glass-panel mt-3 flex items-center gap-2 rounded-xl px-3 py-2 text-xs text-muted-foreground">
-        <Cpu className="h-4 w-4 text-accent" />
-        Este selector guarda tu preferencia. La conexión real se realiza
-        desde el backend (LangGraph).
-      </div>
+      <Hint>
+        <div className="flex items-start gap-2">
+          <Cpu className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+          <span>
+            En producción Aiko usa el cascade del backend (Groq → Gemini → …).
+            Este selector guarda tu preferencia para cuando conectes control
+            manual.
+          </span>
+        </div>
+      </Hint>
     </PanelShell>
   );
 }
@@ -226,7 +373,7 @@ export function MemoryPanel() {
     return [
       "Le gusta el color rosa 💗",
       "Estudia programación en las noches",
-      "Prefiere respuestas cortas y cariñosas",
+      "Prefiere respuestas claras y cariñosas",
     ];
   });
   const [draft, setDraft] = useState("");
@@ -239,49 +386,64 @@ export function MemoryPanel() {
     }
   }, [items]);
 
+  function add() {
+    const t = draft.trim();
+    if (!t) return;
+    setItems((x) => [t, ...x]);
+    setDraft("");
+  }
+
   return (
-    <PanelShell title="Memoria a largo plazo" subtitle="Aiko recuerda lo importante (se conectará a Chroma)">
+    <PanelShell
+      title="Memoria"
+      subtitle="Datos que Aiko recuerda de ti (local por ahora)"
+    >
       <div className="flex gap-2">
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && draft.trim()) {
-              setItems((x) => [draft.trim(), ...x]);
-              setDraft("");
-            }
-          }}
+          onKeyDown={(e) => e.key === "Enter" && add()}
           placeholder="Agregar un recuerdo..."
-          className="glass-panel flex-1 rounded-lg bg-transparent px-3 py-2 text-sm outline-none"
+          className="flex-1 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-sm outline-none focus:border-primary/40"
         />
         <button
-          onClick={() => {
-            if (!draft.trim()) return;
-            setItems((x) => [draft.trim(), ...x]);
-            setDraft("");
-          }}
-          className="rounded-lg bg-primary px-3 text-sm text-primary-foreground"
+          onClick={add}
+          className="rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground shadow-md shadow-primary/20"
         >
           Guardar
         </button>
       </div>
-      <ul className="mt-3 space-y-1.5">
-        {items.map((it, i) => (
-          <li key={i} className="glass-panel group flex items-center justify-between rounded-lg px-3 py-2 text-sm">
-            <span className="flex items-center gap-2">
-              <Sparkles className="h-3 w-3 text-accent" />
-              {it}
-            </span>
-            <button
-              onClick={() => setItems((x) => x.filter((_, j) => j !== i))}
-              className="opacity-0 transition group-hover:opacity-100"
-              aria-label="Eliminar"
+
+      <div>
+        <SectionLabel>{items.length} recuerdos</SectionLabel>
+        <ul className="space-y-1.5">
+          {items.map((it, i) => (
+            <li
+              key={i}
+              className="group flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2.5 text-sm"
             >
-              <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
-            </button>
-          </li>
-        ))}
-      </ul>
+              <Sparkles className="h-3.5 w-3.5 shrink-0 text-primary/80" />
+              <span className="min-w-0 flex-1 text-foreground">{it}</span>
+              <button
+                onClick={() => setItems((x) => x.filter((_, j) => j !== i))}
+                className="rounded-md p-1 text-muted-foreground opacity-0 transition hover:text-destructive group-hover:opacity-100"
+                aria-label="Eliminar"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </li>
+          ))}
+          {items.length === 0 && (
+            <li className="rounded-xl border border-dashed border-white/10 px-3 py-8 text-center text-xs text-muted-foreground">
+              Sin recuerdos todavía
+            </li>
+          )}
+        </ul>
+      </div>
+
+      <Hint>
+        Más adelante estos datos se sincronizan con Chroma/Supabase del backend.
+      </Hint>
     </PanelShell>
   );
 }
@@ -300,39 +462,66 @@ export function ToolsPanel({
   onScreenshot: () => void;
 }) {
   const quick = [
-    { icon: Search, label: "Búsqueda rápida", desc: "Consulta al buscador", run: onRunQuickSearch },
-    { icon: Wand2, label: "Búsqueda profunda", desc: "Investigación detallada", run: onRunDeepSearch },
-    { icon: Sparkles, label: "Resumir memoria", desc: "Compacta lo que recuerdo", run: onSummarizeMemory },
-    { icon: FileText, label: "Captura de pantalla", desc: "(Tauri) captura la ventana", run: onScreenshot },
+    {
+      icon: Search,
+      label: "Búsqueda rápida",
+      desc: "Consulta breve en internet",
+      run: onRunQuickSearch,
+    },
+    {
+      icon: Wand2,
+      label: "Búsqueda profunda",
+      desc: "Investigación más detallada",
+      run: onRunDeepSearch,
+    },
+    {
+      icon: Sparkles,
+      label: "Resumir memoria",
+      desc: "Compacta lo que recuerdo de ti",
+      run: onSummarizeMemory,
+    },
+    {
+      icon: FileText,
+      label: "Captura",
+      desc: "Describe la pantalla (Tauri)",
+      run: onScreenshot,
+    },
   ];
 
   const capabilities = [
-    { icon: Search, label: "Búsqueda en internet", desc: "Con caché inteligente" },
-    { icon: Folder, label: "Acceso a carpetas", desc: "Sólo carpetas que autorices" },
-    { icon: FileText, label: "Buscar archivos", desc: "Por nombre o contenido" },
-    { icon: Wand2, label: "Abrir aplicaciones", desc: "Con permiso explícito" },
-    { icon: ShieldCheck, label: "Acciones sensibles", desc: "Siempre pide confirmación" },
+    { icon: Search, label: "Búsqueda en internet", desc: "Con fallback DuckDuckGo" },
+    { icon: Folder, label: "Carpetas autorizadas", desc: "Solo rutas que permitas" },
+    { icon: FileText, label: "Leer documentos", desc: "PDF, Word, texto" },
+    { icon: Wand2, label: "Crear archivos", desc: "PDF y documentos generados" },
+    { icon: ShieldCheck, label: "Acciones sensibles", desc: "Siempre con confirmación" },
   ];
 
   return (
-    <PanelShell title="Herramientas del agente" subtitle="Acciones rápidas y capacidades">
+    <PanelShell
+      title="Herramientas"
+      subtitle="Acciones rápidas y capacidades del agente"
+    >
       <div>
-        <div className="mb-2 text-[10px] uppercase tracking-widest text-muted-foreground">
-          Acciones rápidas
-        </div>
-        <div className="grid grid-cols-2 gap-2">
+        <SectionLabel>Acciones rápidas</SectionLabel>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {quick.map((q) => {
             const Icon = q.icon;
             return (
               <button
                 key={q.label}
                 onClick={q.run}
-                className="glass-panel flex items-start gap-2 rounded-xl px-3 py-3 text-left text-xs transition hover:border-primary/40 neon-pink-hover"
+                className="flex items-start gap-3 rounded-xl border border-white/10 bg-white/[0.02] px-3.5 py-3 text-left transition hover:border-primary/30 hover:bg-primary/10"
               >
-                <Icon className="h-4 w-4 shrink-0 text-accent" />
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent/15 text-accent">
+                  <Icon className="h-4 w-4" />
+                </div>
                 <div>
-                  <div className="text-sm font-medium">{q.label}</div>
-                  <div className="text-[11px] text-muted-foreground">{q.desc}</div>
+                  <div className="text-sm font-medium text-foreground">
+                    {q.label}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground">
+                    {q.desc}
+                  </div>
                 </div>
               </button>
             );
@@ -340,26 +529,30 @@ export function ToolsPanel({
         </div>
       </div>
 
-      <div className="mt-4">
-        <div className="mb-2 text-[10px] uppercase tracking-widest text-muted-foreground">
-          Capacidades
-        </div>
+      <div>
+        <SectionLabel>Capacidades</SectionLabel>
         <ul className="space-y-2">
           {capabilities.map((t) => {
             const Icon = t.icon;
             return (
-              <li key={t.label} className="glass-panel flex items-start gap-3 rounded-xl px-3 py-3">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent/15 text-accent">
+              <li
+                key={t.label}
+                className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3"
+              >
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/5 text-accent">
                   <Icon className="h-4 w-4" />
                 </div>
-                <div>
-                  <div className="text-sm font-medium">{t.label}</div>
-                  <div className="text-xs text-muted-foreground">{t.desc}</div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium text-foreground">
+                    {t.label}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground">
+                    {t.desc}
+                  </div>
                 </div>
-                <label className="ml-auto inline-flex cursor-pointer items-center">
-                  <input type="checkbox" defaultChecked className="sr-only peer" />
-                  <span className="h-5 w-9 rounded-full bg-muted transition peer-checked:bg-primary" />
-                </label>
+                <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
+                  Activo
+                </span>
               </li>
             );
           })}
@@ -369,11 +562,15 @@ export function ToolsPanel({
   );
 }
 
-/* -------------------------------- Settings (tabbed) -------------------------------- */
+/* -------------------------------- Settings -------------------------------- */
 
 type SettingsTab = "appearance" | "voice" | "models" | "data" | "advanced";
 
-const SETTINGS_TABS: { id: SettingsTab; label: string; icon: typeof Palette }[] = [
+const SETTINGS_TABS: {
+  id: SettingsTab;
+  label: string;
+  icon: typeof Palette;
+}[] = [
   { id: "appearance", label: "Apariencia", icon: Palette },
   { id: "voice", label: "Voz", icon: Mic2 },
   { id: "models", label: "Modelos", icon: Cpu },
@@ -405,8 +602,11 @@ export function SettingsPanel({
   const { level, setLevel } = useAnalysisLevel();
   const [density, setDensity] = useState<"cozy" | "compact">(() => {
     if (typeof window === "undefined") return "cozy";
-    return (localStorage.getItem("aiko.ui.density") as "cozy" | "compact") ?? "cozy";
+    return (
+      (localStorage.getItem("aiko.ui.density") as "cozy" | "compact") ?? "cozy"
+    );
   });
+
   useEffect(() => {
     try {
       localStorage.setItem("aiko.ui.density", density);
@@ -416,12 +616,17 @@ export function SettingsPanel({
   }, [density]);
 
   return (
-    <div className="glass-panel flex h-full flex-col overflow-hidden rounded-2xl">
-      <header className="border-b border-white/5 px-5 py-4">
-        <h2 className="font-display text-lg font-semibold text-glow-pink">Ajustes</h2>
-        <p className="text-xs text-muted-foreground">Personaliza a Aiko a tu gusto</p>
+    <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#12141c]/95 shadow-xl">
+      <header className="shrink-0 border-b border-white/10 px-5 py-4">
+        <h2 className="text-base font-semibold tracking-tight text-foreground">
+          Ajustes
+        </h2>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          Personaliza la experiencia de Aiko
+        </p>
       </header>
-      <nav className="flex gap-1 overflow-x-auto border-b border-white/5 px-3 py-2">
+
+      <nav className="flex gap-1 overflow-x-auto border-b border-white/10 px-3 py-2">
         {SETTINGS_TABS.map((t) => {
           const Icon = t.icon;
           const active = t.id === tab;
@@ -430,23 +635,26 @@ export function SettingsPanel({
               key={t.id}
               onClick={() => setTab(t.id)}
               className={cn(
-                "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs transition",
+                "flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs transition",
                 active
-                  ? "bg-primary/15 text-foreground"
+                  ? "bg-primary/15 text-foreground ring-1 ring-primary/25"
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
-              <Icon className={cn("h-3.5 w-3.5", active ? "text-primary" : "text-accent")} />
+              <Icon
+                className={cn("h-3.5 w-3.5", active ? "text-primary" : "")}
+              />
               {t.label}
             </button>
           );
         })}
       </nav>
-      <div className="flex-1 space-y-3 overflow-y-auto p-5">
+
+      <div className="flex-1 space-y-5 overflow-y-auto p-5">
         {tab === "appearance" && (
           <>
             <Row label="Tema">
-              <div className="flex gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 {(
                   [
                     { id: "dark", label: "Oscuro", Icon: Moon },
@@ -458,37 +666,42 @@ export function SettingsPanel({
                     key={id}
                     onClick={() => setTheme(id)}
                     className={cn(
-                      "glass-panel flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs transition",
+                      "flex flex-col items-center gap-1.5 rounded-xl border px-2 py-3 text-xs transition",
                       theme === id
-                        ? "border-primary/50 text-foreground neon-pink"
-                        : "text-muted-foreground",
+                        ? "border-primary/40 bg-primary/10 text-foreground"
+                        : "border-white/10 text-muted-foreground hover:bg-white/5",
                     )}
                   >
-                    <Icon className="h-3.5 w-3.5" /> {label}
+                    <Icon className="h-4 w-4" />
+                    {label}
                   </button>
                 ))}
               </div>
             </Row>
-            <Row label="Idioma predeterminado">
+
+            <Row label="Idioma">
               <select
                 value={language}
                 onChange={(e) => setLanguage(e.target.value)}
-                className="glass-panel w-full rounded-lg bg-transparent px-3 py-2 text-sm outline-none"
+                className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-sm outline-none focus:border-primary/40"
               >
                 <option value="es">Español</option>
                 <option value="en">English</option>
                 <option value="ja">日本語</option>
               </select>
             </Row>
+
             <Row label="Densidad de la interfaz">
-              <div className="flex gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 {(["cozy", "compact"] as const).map((d) => (
                   <button
                     key={d}
                     onClick={() => setDensity(d)}
                     className={cn(
-                      "glass-panel flex-1 rounded-lg px-3 py-2 text-xs capitalize transition",
-                      density === d ? "border-primary/50 text-foreground neon-pink" : "text-muted-foreground",
+                      "rounded-xl border px-3 py-2.5 text-xs transition",
+                      density === d
+                        ? "border-primary/40 bg-primary/10 text-foreground"
+                        : "border-white/10 text-muted-foreground hover:bg-white/5",
                     )}
                   >
                     {d === "cozy" ? "Acogedora" : "Compacta"}
@@ -496,14 +709,19 @@ export function SettingsPanel({
                 ))}
               </div>
             </Row>
-            <Row label="Carpeta del modelo waifu (Live2D)">
+
+            <Row
+              label="Carpeta del modelo Live2D"
+              description="Ruta local del modelo waifu (opcional)"
+            >
               <input
                 value={modelFolder}
                 onChange={(e) => setModelFolder(e.target.value)}
-                placeholder="/Users/tu-usuario/AikoModels/aiko-default"
-                className="glass-panel w-full rounded-lg bg-transparent px-3 py-2 text-sm outline-none"
+                placeholder="/ruta/a/tu/modelo"
+                className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-sm outline-none focus:border-primary/40"
               />
             </Row>
+
             <SfxRow />
             <AffectionCard />
           </>
@@ -519,26 +737,28 @@ export function SettingsPanel({
             <ModelsPanel {...modelProps} />
           </div>
         )}
+
         {tab === "data" && (
           <>
             <Hint>
-              Todos los datos se guardan localmente en tu navegador. Cuando
-              empaquetes con Tauri, migra a un almacén local seguro.
+              Los datos de esta app se guardan en el navegador. Al empaquetar
+              con Tauri puedes migrarlos a un almacén local más seguro.
             </Hint>
             <button
               onClick={onClearChat}
-              className="flex w-full items-center gap-2 rounded-xl border border-white/10 px-4 py-2 text-sm text-muted-foreground hover:bg-white/5"
+              className="flex w-full items-center gap-2 rounded-xl border border-white/10 px-4 py-2.5 text-sm text-muted-foreground transition hover:bg-white/5 hover:text-foreground"
             >
               <Trash2 className="h-4 w-4" /> Borrar conversación activa
             </button>
             <button
               onClick={onClearAll}
-              className="flex w-full items-center gap-2 rounded-xl border border-destructive/40 px-4 py-2 text-sm text-destructive hover:bg-destructive/10"
+              className="flex w-full items-center gap-2 rounded-xl border border-destructive/30 px-4 py-2.5 text-sm text-destructive transition hover:bg-destructive/10"
             >
               <Trash2 className="h-4 w-4" /> Borrar TODO el historial
             </button>
           </>
         )}
+
         {tab === "advanced" && (
           <>
             <Row label="Nivel de análisis global">
@@ -554,10 +774,10 @@ export function SettingsPanel({
                     key={id}
                     onClick={() => setLevel(id)}
                     className={cn(
-                      "glass-panel flex flex-col items-center gap-1 rounded-lg px-2 py-3 text-xs transition",
+                      "flex flex-col items-center gap-1 rounded-xl border px-2 py-3 text-xs transition",
                       level === id
-                        ? "border-primary/50 text-foreground neon-pink"
-                        : "text-muted-foreground",
+                        ? "border-primary/40 bg-primary/10 text-foreground"
+                        : "border-white/10 text-muted-foreground hover:bg-white/5",
                     )}
                   >
                     <Icon className="h-4 w-4 text-primary" />
@@ -570,61 +790,39 @@ export function SettingsPanel({
               {LEVEL_META[level].desc}
             </p>
             <Hint>
-              Atajos de teclado:
-              <ul className="mt-2 space-y-1 text-xs">
-                <li><kbd className="rounded bg-white/10 px-1">Ctrl+K</kbd> · Paleta de comandos</li>
-                <li><kbd className="rounded bg-white/10 px-1">Ctrl+Shift+N</kbd> · Nueva conversación</li>
-                <li><kbd className="rounded bg-white/10 px-1">Ctrl+/</kbd> · Enfocar el chat</li>
-                <li><kbd className="rounded bg-white/10 px-1">Ctrl+M</kbd> · Micrófono</li>
-              </ul>
-            </Hint>
-            <Hint>
-              Este proyecto está preparado para empaquetarse como app de
-              escritorio con Tauri. Todo funciona en local — sin llamadas
-              externas por defecto.
+              <div className="space-y-1.5">
+                <div className="font-medium text-foreground/90">Atajos</div>
+                <ul className="space-y-1">
+                  <li>
+                    <kbd className="rounded bg-white/10 px-1.5 py-0.5 text-[10px]">
+                      Ctrl+K
+                    </kbd>{" "}
+                    · Paleta de comandos
+                  </li>
+                  <li>
+                    <kbd className="rounded bg-white/10 px-1.5 py-0.5 text-[10px]">
+                      Ctrl+Shift+N
+                    </kbd>{" "}
+                    · Nueva conversación
+                  </li>
+                  <li>
+                    <kbd className="rounded bg-white/10 px-1.5 py-0.5 text-[10px]">
+                      Ctrl+/
+                    </kbd>{" "}
+                    · Enfocar el chat
+                  </li>
+                  <li>
+                    <kbd className="rounded bg-white/10 px-1.5 py-0.5 text-[10px]">
+                      Ctrl+M
+                    </kbd>{" "}
+                    · Micrófono
+                  </li>
+                </ul>
+              </div>
             </Hint>
           </>
         )}
       </div>
-    </div>
-  );
-}
-
-/* -------------------------------- Shared -------------------------------- */
-
-function PanelShell({
-  title,
-  subtitle,
-  children,
-}: {
-  title: string;
-  subtitle: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="glass-panel flex h-full flex-col overflow-hidden rounded-2xl">
-      <header className="border-b border-white/5 px-5 py-4">
-        <h2 className="font-display text-lg font-semibold text-glow-pink">{title}</h2>
-        <p className="text-xs text-muted-foreground">{subtitle}</p>
-      </header>
-      <div className="flex-1 space-y-3 overflow-y-auto p-5">{children}</div>
-    </div>
-  );
-}
-
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="block space-y-1.5">
-      <span className="text-[10px] uppercase tracking-widest text-muted-foreground">{label}</span>
-      {children}
-    </label>
-  );
-}
-
-function Hint({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="mt-1 rounded-lg border border-accent/20 bg-accent/5 p-3 text-xs text-muted-foreground">
-      {children}
     </div>
   );
 }
@@ -641,8 +839,8 @@ function SfxRow() {
           if (v) sfx.chime();
         }}
         className={cn(
-          "glass-panel flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition",
-          enabled ? "text-foreground" : "text-muted-foreground",
+          "flex w-full items-center justify-between rounded-xl border border-white/10 px-3 py-2.5 text-sm transition",
+          enabled ? "bg-white/[0.04] text-foreground" : "text-muted-foreground",
         )}
       >
         <span className="flex items-center gap-2">
@@ -662,7 +860,7 @@ function SfxRow() {
           <span
             className={cn(
               "block h-4 w-4 rounded-full bg-white transition-transform",
-              enabled ? "translate-x-4" : "",
+              enabled && "translate-x-4",
             )}
           />
         </span>
@@ -674,17 +872,17 @@ function SfxRow() {
 function AffectionCard() {
   const a = useAffection();
   return (
-    <div className="glass-panel rounded-xl p-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Heart className="h-4 w-4 fill-primary text-primary text-glow-pink" />
-          <div>
-            <div className="text-sm font-semibold">
-              Nivel {a.level} · {a.title}
-            </div>
-            <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
-              {a.into}/{a.needed} XP · racha {a.streakDays}d
-            </div>
+    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/15">
+          <Heart className="h-4 w-4 fill-primary text-primary" />
+        </div>
+        <div>
+          <div className="text-sm font-semibold text-foreground">
+            Nivel {a.level} · {a.title}
+          </div>
+          <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+            {a.into}/{a.needed} XP · racha {a.streakDays}d
           </div>
         </div>
       </div>
@@ -697,4 +895,3 @@ function AffectionCard() {
     </div>
   );
 }
-
