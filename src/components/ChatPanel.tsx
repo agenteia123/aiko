@@ -134,13 +134,38 @@ function dayLabel(ts: number): string {
   });
 }
 
+function filenameFromUrl(url: string, fallback = "documento.pdf"): string {
+  try {
+    const u = new URL(url);
+    const last = decodeURIComponent(u.pathname.split("/").pop() || fallback);
+    return last.split("?")[0] || fallback;
+  } catch {
+    const last = url.split("/").pop() || fallback;
+    return last.split("?")[0] || fallback;
+  }
+}
+
+function withDownloadName(url: string, fallback = "documento.pdf"): string {
+  const name = filenameFromUrl(url, fallback);
+  try {
+    const u = new URL(url);
+    u.searchParams.delete("");
+    u.searchParams.set("download", name);
+    return u.toString();
+  } catch {
+    const clean = url.replace(/\?+$/, "");
+    const sep = clean.includes("?") ? "&" : "?";
+    return `${clean}${sep}download=${encodeURIComponent(name)}`;
+  }
+}
+
 function extractDocLinks(text: string): { url: string; label: string }[] {
   const links: { url: string; label: string }[] = [];
   const re = /(https?:\/\/[^\s<>"']+)/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text))) {
-    let url = m[1].replace(/[),.;]+$/, "");
-    const lower = url.toLowerCase();
+    const raw = m[1].replace(/[),.;]+$/, "");
+    const lower = raw.toLowerCase();
     if (
       lower.includes("supabase.co") ||
       lower.endsWith(".pdf") ||
@@ -148,11 +173,10 @@ function extractDocLinks(text: string): { url: string; label: string }[] {
       lower.includes(".docx") ||
       lower.includes(".xlsx")
     ) {
-      const name = decodeURIComponent(url.split("/").pop() || "documento");
-      const clean = name.split("?")[0];
+      const label = filenameFromUrl(raw);
       links.push({
-        url,
-        label: clean.length > 36 ? clean.slice(0, 36) + "…" : clean,
+        url: withDownloadName(raw, label),
+        label: label.length > 36 ? `${label.slice(0, 36)}…` : label,
       });
     }
   }
@@ -183,8 +207,6 @@ export function ChatPanel({
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-
-  // Ref para poder llamar sendText desde el callback de voz sin dependencias rotas
   const sendTextRef = useRef<(text: string) => void>(() => {});
 
   const stt = useSpeechRecognition({
@@ -193,7 +215,6 @@ export function ChatPanel({
     onFinal: (text) => {
       const t = text.trim();
       if (!t) return;
-      // Voz → envío automático al sistema (chat + recordatorios + backend)
       sendTextRef.current(t);
     },
   });
@@ -339,7 +360,6 @@ export function ChatPanel({
     [uploadFile],
   );
 
-  /** Crea recordatorio local si el mensaje lo pide (voz o texto) */
   const tryCreateReminder = useCallback((text: string) => {
     const intent = parseReminderIntent(text);
     if (!intent) return false;
@@ -381,8 +401,6 @@ export function ChatPanel({
       if (typing || uploading) return;
 
       setError(null);
-
-      // 1) Recordatorio local (voz o texto)
       tryCreateReminder(text);
 
       const currentAttachments = [...attachments];
@@ -491,7 +509,6 @@ export function ChatPanel({
     ],
   );
 
-  // Mantener ref actualizado para el callback de voz
   useEffect(() => {
     sendTextRef.current = sendText;
   }, [sendText]);
@@ -876,10 +893,12 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
   let displayText = msg.text;
   if (docs.length) {
     for (const d of docs) {
+      displayText = displayText.replace(d.url.split("?")[0], "").trim();
       displayText = displayText.replace(d.url, "").trim();
     }
     displayText = displayText
       .replace(/✅\s*PDF listo\.?\s*Descárgalo aquí:\s*/gi, "")
+      .replace(/https?:\/\/[^\s]+/gi, "")
       .replace(/\n{3,}/g, "\n\n")
       .trim();
   }
@@ -918,6 +937,7 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
                   <a
                     key={d.url}
                     href={d.url}
+                    download={d.label || "documento.pdf"}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-3 rounded-xl border border-primary/25 bg-primary/10 px-3 py-2.5 text-xs transition hover:bg-primary/20"
@@ -927,10 +947,10 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="font-medium text-foreground">
-                        Documento listo
+                        Descargar {d.label}
                       </div>
                       <div className="truncate text-[10px] text-muted-foreground">
-                        {d.label}
+                        Se guardará con ese nombre
                       </div>
                     </div>
                     <Download className="h-4 w-4 shrink-0 text-primary" />
