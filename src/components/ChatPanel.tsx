@@ -670,7 +670,7 @@ export function ChatPanel({
 
         <div
           ref={scrollRef}
-          className="flex-1 space-y-4 overflow-y-auto px-4 py-5 sm:px-8"
+          className="min-w-0 flex-1 space-y-5 overflow-x-hidden overflow-y-auto px-2.5 py-5 sm:px-6 lg:px-8"
         >
           {timeline.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center px-4 text-center">
@@ -904,7 +904,12 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
   }
 
   return (
-    <div className={cn("flex gap-3", isUser ? "justify-end" : "justify-start")}>
+    <div
+      className={cn(
+        "flex min-w-0 gap-2 sm:gap-3",
+        isUser ? "justify-end" : "justify-start",
+      )}
+    >
       {!isUser && (
         <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/20 ring-1 ring-primary/25">
           <Heart className="h-3.5 w-3.5 fill-primary text-primary" />
@@ -913,10 +918,10 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
 
       <div
         className={cn(
-          "max-w-[min(78%,36rem)] space-y-2 rounded-2xl px-4 py-3 text-[13.5px] leading-relaxed",
+          "min-w-0 space-y-3 rounded-2xl text-[13.5px] leading-6 sm:text-sm",
           isUser
-            ? "rounded-br-md bg-[#ff4d9a] text-white shadow-md shadow-pink-500/15"
-            : "rounded-bl-md border border-white/10 bg-[#1a1d27] text-foreground",
+            ? "max-w-[88%] rounded-br-md bg-[#ff4d9a] px-4 py-3 text-white shadow-md shadow-pink-500/15 sm:max-w-[75%]"
+            : "w-full max-w-4xl rounded-bl-md border border-white/10 bg-[#1a1d27] px-3.5 py-4 text-foreground shadow-lg shadow-black/10 sm:px-5",
         )}
       >
         {isUser ? (
@@ -924,8 +929,118 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
         ) : (
           <>
             {displayText && (
-              <div className="prose prose-sm dark:prose-invert max-w-none break-words prose-p:my-2 prose-a:text-sky-400">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              <div className="min-w-0 max-w-none overflow-hidden break-words text-[13.5px] leading-6 text-foreground/90 sm:text-sm">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    h1: ({ children }) => (
+                      <h1 className="mb-3 mt-5 border-b border-white/10 pb-2 text-xl font-bold tracking-tight text-foreground first:mt-0">
+                        {children}
+                      </h1>
+                    ),
+                    h2: ({ children }) => (
+                      <h2 className="mb-2.5 mt-5 text-lg font-bold tracking-tight text-foreground first:mt-0">
+                        {children}
+                      </h2>
+                    ),
+                    h3: ({ children }) => (
+                      <h3 className="mb-2 mt-4 text-base font-semibold text-foreground first:mt-0">
+                        {children}
+                      </h3>
+                    ),
+                    p: ({ children }) => (
+                      <p className="my-2.5 whitespace-pre-wrap leading-6 first:mt-0 last:mb-0">
+                        {children}
+                      </p>
+                    ),
+                    strong: ({ children }) => (
+                      <strong className="font-semibold text-foreground">
+                        {children}
+                      </strong>
+                    ),
+                    em: ({ children }) => (
+                      <em className="text-foreground/80">{children}</em>
+                    ),
+                    a: ({ children, href }) => (
+                      <a
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-medium text-sky-400 underline decoration-sky-400/40 underline-offset-4 transition hover:text-sky-300"
+                      >
+                        {children}
+                      </a>
+                    ),
+                    ul: ({ children }) => (
+                      <ul className="my-3 list-disc space-y-1.5 pl-5 marker:text-primary">
+                        {children}
+                      </ul>
+                    ),
+                    ol: ({ children }) => (
+                      <ol className="my-3 list-decimal space-y-1.5 pl-5 marker:font-semibold marker:text-primary">
+                        {children}
+                      </ol>
+                    ),
+                    li: ({ children }) => (
+                      <li className="pl-1 leading-6">{children}</li>
+                    ),
+                    blockquote: ({ children }) => (
+                      <blockquote className="my-3 rounded-r-xl border-l-2 border-primary/60 bg-primary/[0.08] px-4 py-2 text-foreground/80">
+                        {children}
+                      </blockquote>
+                    ),
+                    hr: () => <hr className="my-4 border-white/10" />,
+                    code: ({ children, className }) => {
+                      const isBlock = Boolean(className);
+                      return isBlock ? (
+                        <code className="block min-w-max font-mono text-xs leading-5 text-slate-200">
+                          {children}
+                        </code>
+                      ) : (
+                        <code className="rounded-md bg-black/30 px-1.5 py-0.5 font-mono text-[0.9em] text-pink-200">
+                          {children}
+                        </code>
+                      );
+                    },
+                    pre: ({ children }) => (
+                      <pre className="my-3 max-w-full overflow-x-auto rounded-xl border border-white/10 bg-black/35 p-3.5">
+                        {children}
+                      </pre>
+                    ),
+                    table: ({ children }) => (
+                      <div className="my-4 max-w-full overflow-x-auto rounded-xl border border-white/10 bg-black/15 shadow-inner [scrollbar-color:rgba(255,77,154,.45)_transparent] [scrollbar-width:thin]">
+                        <table className="w-full min-w-[34rem] table-auto border-collapse text-left text-[12px] leading-5 sm:text-[13px]">
+                          {children}
+                        </table>
+                      </div>
+                    ),
+                    thead: ({ children }) => (
+                      <thead className="bg-white/[0.07] text-foreground">
+                        {children}
+                      </thead>
+                    ),
+                    tbody: ({ children }) => (
+                      <tbody className="divide-y divide-white/[0.07]">
+                        {children}
+                      </tbody>
+                    ),
+                    tr: ({ children }) => (
+                      <tr className="transition-colors hover:bg-white/[0.035]">
+                        {children}
+                      </tr>
+                    ),
+                    th: ({ children }) => (
+                      <th className="border-r border-white/[0.07] px-3 py-2.5 align-top font-semibold text-foreground last:border-r-0">
+                        {children}
+                      </th>
+                    ),
+                    td: ({ children }) => (
+                      <td className="border-r border-white/[0.06] px-3 py-2.5 align-top text-foreground/80 last:border-r-0">
+                        {children}
+                      </td>
+                    ),
+                  }}
+                >
                   {displayText}
                 </ReactMarkdown>
               </div>
