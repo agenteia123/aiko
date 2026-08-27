@@ -41,7 +41,6 @@ import {
 import { useSpeechRecognition } from "@/lib/useSpeechRecognition";
 import { cn } from "@/lib/utils";
 import { API_BASE_URL, API_KEY } from "@/config/api";
-import { parseReminderIntent } from "@/lib/parseReminder";
 import { store } from "@/lib/productivity";
 
 interface ChatPanelProps {
@@ -137,6 +136,13 @@ function looksLikeReminderRefusal(text: string): boolean {
   );
 }
 
+function normalizeReminderAt(at: number | string): number {
+  if (typeof at === "number") return at;
+  const value = at.trim();
+  const hasTimeZone = /(?:z|[+-]\d{2}:?\d{2})$/i.test(value);
+  return new Date(hasTimeZone ? value : `${value}Z`).getTime();
+}
+
 function formatReminderWhen(at: number | string): string {
   const d = new Date(normalizeReminderAt(at));
   return d.toLocaleString("es-PE", {
@@ -146,15 +152,6 @@ function formatReminderWhen(at: number | string): string {
     minute: "2-digit",
     timeZone: "America/Lima",
   });
-}
-
-function normalizeReminderAt(at: number | string): number {
-  if (typeof at === "number") return at;
-  const value = at.trim();
-  // El backend trabaja en UTC, pero algunas respuestas ISO pueden llegar sin
-  // el sufijo Z. Sin él, el navegador asumiría erróneamente la hora local.
-  const hasTimeZone = /(?:z|[+-]\d{2}:?\d{2})$/i.test(value);
-  return new Date(hasTimeZone ? value : `${value}Z`).getTime();
 }
 
 function dayLabel(ts: number): string {
@@ -420,40 +417,6 @@ export function ChatPanel({
     [uploadFile],
   );
 
-  const tryCreateReminder = useCallback((text: string) => {
-    const intent = parseReminderIntent(text);
-    if (!intent) return false;
-
-    const items = store.loadReminders();
-    store.saveReminders([
-      {
-        id: crypto.randomUUID(),
-        text: intent.text,
-        at: intent.at,
-        repeat: "none",
-        fired: false,
-      },
-      ...items,
-    ]);
-
-    const when = new Date(intent.at).toLocaleString("es-PE", {
-      day: "2-digit",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-
-    try {
-      toast.success("Recordatorio creado", {
-        description: `${intent.text} · ${when}`,
-        duration: 4000,
-      });
-    } catch {
-      /* ignore */
-    }
-    return true;
-  }, []);
-
   const applyReminder = useCallback(
     (payload: { text: string; at: number | string }) => {
       const atMs = normalizeReminderAt(payload.at);
@@ -462,30 +425,28 @@ export function ChatPanel({
       const items = store.loadReminders();
       const already = items.some(
         (r) =>
-          r.text === payload.text && Math.abs((r.at || 0) - atMs) < 15_000,
+          r.text === payload.text && Math.abs((r.at || 0) - atMs) < 30_000,
       );
-      if (!already) {
-        store.saveReminders([
-          {
-            id: crypto.randomUUID(),
-            text: payload.text,
-            at: atMs,
-            repeat: "none",
-            fired: false,
-          },
-          ...items,
-        ]);
-      }
+      if (already) return true;
 
-      if (!already) {
-        try {
-          toast.success("Recordatorio creado", {
-            description: `${payload.text} · ${formatReminderWhen(atMs)}`,
-            duration: 4000,
-          });
-        } catch {
-          /* ignore */
-        }
+      store.saveReminders([
+        {
+          id: crypto.randomUUID(),
+          text: payload.text,
+          at: atMs,
+          repeat: "none",
+          fired: false,
+        },
+        ...items,
+      ]);
+
+      try {
+        toast.success("Recordatorio creado", {
+          description: `${payload.text} · ${formatReminderWhen(atMs)}`,
+          duration: 4000,
+        });
+      } catch {
+        /* ignore */
       }
       return true;
     },
@@ -499,7 +460,6 @@ export function ChatPanel({
       if (typing || uploading) return;
 
       setError(null);
-      tryCreateReminder(text);
 
       const currentAttachments = [...attachments];
 
@@ -559,30 +519,15 @@ export function ChatPanel({
         const data: BackendChatResponse = await response.json();
         if (!data.success) throw new Error(data.error || "Backend error");
 
-        const localIntent = parseReminderIntent(text);
-        const backendReminder = data.metadata?.reminder;
-
+        const rem = data.metadata?.reminder;
         let replyText =
           data.response || "No pude procesar tu mensaje correctamente.";
 
-        const reminderAt = localIntent?.at ?? backendReminder?.at;
-
-        if (backendReminder?.at || localIntent) {
-          applyReminder({
-            text: backendReminder?.text || localIntent?.text || "Recordatorio",
-            at: reminderAt!,
-          });
-        }
-
-        if (backendReminder || localIntent) {
-          const src = {
-            text: backendReminder?.text || localIntent!.text,
-            at: reminderAt!,
-          };
-          const prefix = looksLikeReminderRefusal(replyText)
-            ? "Sí puedo hacerlo. Listo"
-            : "Listo";
-          replyText = `${prefix}, Ale. Quedó el recordatorio: ${src.text} · ${formatReminderWhen(src.at)} ⏰`;
+        if (rem?.at && rem.text) {
+          applyReminder({ text: rem.text, at: rem.at });
+          if (looksLikeReminderRefusal(replyText)) {
+            replyText = `Listo, Ale. Quedó el recordatorio: ${rem.text} · ${formatReminderWhen(rem.at)} ⏰`;
+          }
         }
 
         const reply: ChatMessage = {
@@ -629,7 +574,6 @@ export function ChatPanel({
       analysisLevel,
       typing,
       uploading,
-      tryCreateReminder,
       applyReminder,
     ],
   );
