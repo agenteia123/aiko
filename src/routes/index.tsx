@@ -44,6 +44,11 @@ function AikoApp() {
   const [reaction, setReaction] = useState<"idle" | "hearts">("idle");
   const [subtitle, setSubtitle] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [showAvatarStage, setShowAvatarStage] = useState(() =>
+    typeof window === "undefined"
+      ? true
+      : window.matchMedia("(min-width: 1180px)").matches,
+  );
   const [floatingReminder, setFloatingReminder] =
     useState<FloatingReminder | null>(null);
 
@@ -60,6 +65,15 @@ function AikoApp() {
     return off;
   }, []);
 
+  useEffect(() => {
+    const query = window.matchMedia("(min-width: 1180px)");
+    const sync = (event: MediaQueryList | MediaQueryListEvent) =>
+      setShowAvatarStage(event.matches);
+    sync(query);
+    query.addEventListener("change", sync);
+    return () => query.removeEventListener("change", sync);
+  }, []);
+
   // Persisted settings
   const [voiceURI, setVoiceURI] = useState<string | null>(null);
   const [rate, setRate] = useState(0.95);
@@ -71,6 +85,19 @@ function AikoApp() {
   const [language, setLanguage] = useState("es");
 
   const actionsRef = useRef<ChatActions | null>(null);
+  const subtitleTimerRef = useRef<number | null>(null);
+  const reactionTimerRef = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (subtitleTimerRef.current)
+        window.clearTimeout(subtitleTimerRef.current);
+      if (reactionTimerRef.current)
+        window.clearTimeout(reactionTimerRef.current);
+      window.speechSynthesis?.cancel();
+    },
+    [],
+  );
 
   useEffect(() => {
     try {
@@ -122,8 +149,7 @@ function AikoApp() {
         (voiceURI && voices.find((v) => v.voiceURI === voiceURI)) ||
         voices.find(
           (v) =>
-            v.lang.toLowerCase().startsWith("es") &&
-            feminineHints.test(v.name),
+            v.lang.toLowerCase().startsWith("es") && feminineHints.test(v.name),
         ) ||
         voices.find((v) => v.lang.toLowerCase().startsWith("es")) ||
         voices[0];
@@ -136,7 +162,8 @@ function AikoApp() {
 
   const showSubtitle = useCallback((text: string) => {
     setSubtitle(text);
-    window.setTimeout(
+    if (subtitleTimerRef.current) window.clearTimeout(subtitleTimerRef.current);
+    subtitleTimerRef.current = window.setTimeout(
       () => setSubtitle((cur) => (cur === text ? null : cur)),
       3500,
     );
@@ -177,10 +204,7 @@ function AikoApp() {
             ? item.at + 7 * 24 * 60 * 60 * 1000
             : item.at + 24 * 60 * 60 * 1000,
       };
-      store.saveReminders([
-        ...items.filter((r) => r.id !== id),
-        next,
-      ]);
+      store.saveReminders([...items.filter((r) => r.id !== id), next]);
     } else {
       store.saveReminders(
         items.map((r) => (r.id === id ? { ...r, fired: true } : r)),
@@ -216,7 +240,11 @@ function AikoApp() {
     speak(line);
     sfx.pop();
     gainXP("avatarClick");
-    window.setTimeout(() => setReaction("idle"), 1500);
+    if (reactionTimerRef.current) window.clearTimeout(reactionTimerRef.current);
+    reactionTimerRef.current = window.setTimeout(
+      () => setReaction("idle"),
+      1500,
+    );
   }
 
   function clearActiveChat() {
@@ -417,10 +445,12 @@ function AikoApp() {
 
           {/* Stage — avatar */}
           <section className="glass-panel relative hidden min-w-0 flex-1 basis-0 items-center justify-center overflow-hidden rounded-2xl min-[1180px]:flex">
-            <AikoAvatar
-              onClick={onAvatarClick}
-              reactionOverride={reaction === "hearts" ? "hearts" : undefined}
-            />
+            {showAvatarStage && (
+              <AikoAvatar
+                onClick={onAvatarClick}
+                reactionOverride={reaction === "hearts" ? "hearts" : undefined}
+              />
+            )}
             {subtitle && (
               <div
                 className="pointer-events-none absolute left-1/2 top-10 -translate-x-1/2"
