@@ -79,13 +79,100 @@ function AikoModel({ reaction, onReady, dragRotation, onBodyHit }: AikoModelProp
     const head = vrm.humanoid?.getNormalizedBoneNode("head");
     const neck = vrm.humanoid?.getNormalizedBoneNode("neck");
     const chest = vrm.humanoid?.getNormalizedBoneNode("upperChest");
+    const leftShoulder = vrm.humanoid?.getNormalizedBoneNode("leftShoulder");
+    const rightShoulder = vrm.humanoid?.getNormalizedBoneNode("rightShoulder");
+    const leftUpperArm = vrm.humanoid?.getNormalizedBoneNode("leftUpperArm");
+    const rightUpperArm = vrm.humanoid?.getNormalizedBoneNode("rightUpperArm");
+    const leftLowerArm = vrm.humanoid?.getNormalizedBoneNode("leftLowerArm");
+    const rightLowerArm = vrm.humanoid?.getNormalizedBoneNode("rightLowerArm");
+    const leftHand = vrm.humanoid?.getNormalizedBoneNode("leftHand");
+    const rightHand = vrm.humanoid?.getNormalizedBoneNode("rightHand");
+    const smooth = 1 - Math.exp(-delta * 7);
+    const move = (current: number, target: number) =>
+      current + (target - current) * smooth;
+
+    let leftUpperX = 0;
+    let rightUpperX = 0;
+    let leftUpperZ = -Math.PI * 0.38;
+    let rightUpperZ = Math.PI * 0.38;
+    let leftLowerX = 0;
+    let rightLowerX = 0;
+    let leftLowerZ = 0.1;
+    let rightLowerZ = -0.1;
+    let leftHandZ = 0;
+    let rightHandZ = 0;
+
+    if (reaction === "blush") {
+      // Ambas manos suben hacia el rostro y Aiko baja la mirada.
+      leftUpperX = -0.72;
+      rightUpperX = -0.72;
+      leftUpperZ = 0.38;
+      rightUpperZ = -0.38;
+      leftLowerX = -1.05;
+      rightLowerX = -1.05;
+      leftLowerZ = 0.72;
+      rightLowerZ = -0.72;
+      leftHandZ = -0.28;
+      rightHandZ = 0.28;
+    } else if (reaction === "hearts") {
+      // Saludo alegre con la mano derecha y un pequeño rebote corporal.
+      rightUpperX = -0.32;
+      rightUpperZ = -0.35;
+      rightLowerX = -0.82;
+      rightLowerZ = -0.62;
+      rightHandZ = Math.sin(t * 8) * 0.24;
+      leftUpperZ += Math.sin(t * 4) * 0.035;
+    } else if (reaction === "angry") {
+      // Postura firme: codos abiertos y manos cerca de la cintura.
+      leftUpperX = 0.12;
+      rightUpperX = 0.12;
+      leftUpperZ = -0.72;
+      rightUpperZ = 0.72;
+      leftLowerX = -0.2;
+      rightLowerX = -0.2;
+      leftLowerZ = -0.92;
+      rightLowerZ = 0.92;
+    } else {
+      // Movimiento de reposo muy suave para evitar una pose rígida.
+      leftUpperX = Math.sin(t * 0.72) * 0.018;
+      rightUpperX = -Math.sin(t * 0.72) * 0.018;
+      leftUpperZ += Math.sin(t * 0.58) * 0.018;
+      rightUpperZ -= Math.sin(t * 0.58) * 0.018;
+    }
+
+    if (leftUpperArm) {
+      leftUpperArm.rotation.x = move(leftUpperArm.rotation.x, leftUpperX);
+      leftUpperArm.rotation.z = move(leftUpperArm.rotation.z, leftUpperZ);
+    }
+    if (rightUpperArm) {
+      rightUpperArm.rotation.x = move(rightUpperArm.rotation.x, rightUpperX);
+      rightUpperArm.rotation.z = move(rightUpperArm.rotation.z, rightUpperZ);
+    }
+    if (leftLowerArm) {
+      leftLowerArm.rotation.x = move(leftLowerArm.rotation.x, leftLowerX);
+      leftLowerArm.rotation.z = move(leftLowerArm.rotation.z, leftLowerZ);
+    }
+    if (rightLowerArm) {
+      rightLowerArm.rotation.x = move(rightLowerArm.rotation.x, rightLowerX);
+      rightLowerArm.rotation.z = move(rightLowerArm.rotation.z, rightLowerZ);
+    }
+    if (leftHand) leftHand.rotation.z = move(leftHand.rotation.z, leftHandZ);
+    if (rightHand) rightHand.rotation.z = move(rightHand.rotation.z, rightHandZ);
+    if (leftShoulder) leftShoulder.rotation.z = Math.sin(t * 0.9) * 0.012;
+    if (rightShoulder) rightShoulder.rotation.z = -Math.sin(t * 0.9) * 0.012;
     if (head) {
       head.rotation.y += (state.pointer.x * 0.3 - head.rotation.y) * 0.08;
-      head.rotation.x += (-state.pointer.y * 0.16 - head.rotation.x) * 0.08;
+      const reactionHeadX = reaction === "blush" ? 0.18 : reaction === "angry" ? 0.06 : 0;
+      head.rotation.x +=
+        (reactionHeadX - state.pointer.y * 0.16 - head.rotation.x) * 0.08;
       head.rotation.z += (-state.pointer.x * 0.06 - head.rotation.z) * 0.06;
     }
     if (neck) neck.rotation.y += (state.pointer.x * 0.08 - neck.rotation.y) * 0.04;
-    if (chest) chest.rotation.y = Math.sin(t * 0.45) * 0.018;
+    if (chest) {
+      chest.rotation.y = Math.sin(t * 0.45) * 0.018;
+      chest.rotation.x =
+        Math.sin(t * 1.25) * 0.008 + (reaction === "hearts" ? Math.sin(t * 5) * 0.012 : 0);
+    }
 
     const blinkCycle = t % 5.4;
     const blink = blinkCycle > 5.08 ? Math.sin(((blinkCycle - 5.08) / 0.32) * Math.PI) : 0;
@@ -152,7 +239,7 @@ export function AikoAvatar({ onClick, onAffectionChange, reactionOverride }: Aik
   const drag = useRef({ active: false, moved: false, x: 0, y: 0 });
   const bodyHit = useRef<"head" | "body" | "chest" | "butt" | null>(null);
   const affection = useAffection();
-  const effective = reactionOverride ?? reaction;
+  const effective = reaction !== "idle" ? reaction : reactionOverride ?? "idle";
 
   useEffect(() => () => {
     if (resetTimer.current) window.clearTimeout(resetTimer.current);
@@ -180,7 +267,13 @@ export function AikoAvatar({ onClick, onAffectionChange, reactionOverride }: Aik
         : ["¡¿Qué estás haciendo?! No vuelvas a tocarme ahí.", "¡Pervertido! Eso te costará mucho cariño."],
     };
 
-    setReaction(inappropriateTouch ? "angry" : "hearts");
+    setReaction(
+      inappropriateTouch
+        ? "angry"
+        : isFlirty && bodyPart === "head"
+          ? "blush"
+          : "hearts",
+    );
     const id = Date.now();
     setHearts(inappropriateTouch ? [] : [id, id + 1, id + 2, id + 3, id + 4]);
     const options = messages[bodyPart];
@@ -193,7 +286,7 @@ export function AikoAvatar({ onClick, onAffectionChange, reactionOverride }: Aik
     resetTimer.current = window.setTimeout(() => {
       setReaction("idle");
       setHearts([]);
-    }, 1700);
+    }, inappropriateTouch ? 2300 : isFlirty && bodyPart === "head" ? 2400 : 1800);
     if (bodyPart === "chest") loseXP(chestPenalty, "chestTouch");
     else if (bodyPart === "butt") loseXP(buttPenalty, "buttTouch");
     else onClick?.();
