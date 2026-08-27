@@ -398,14 +398,14 @@ function AikoApp() {
   );
 
   return (
-    <div className="h-screen w-screen overflow-hidden p-3">
+    <div className="h-screen w-screen overflow-hidden p-1.5 sm:p-2 lg:p-3">
       <div className="glass-panel flex h-full w-full flex-col overflow-hidden rounded-3xl">
         <TitleBar
           alwaysOnTop={alwaysOnTop}
           onToggleAlwaysOnTop={() => setAlwaysOnTop((v) => !v)}
         />
 
-        <div className="flex min-h-0 flex-1 gap-3 p-3">
+        <div className="flex min-h-0 min-w-0 flex-1 gap-2 p-2 lg:gap-3 lg:p-3">
           <AikoSidebar
             active={tab}
             onChange={setTab}
@@ -416,7 +416,7 @@ function AikoApp() {
           />
 
           {/* Stage — avatar */}
-          <section className="glass-panel relative flex min-w-0 flex-1 basis-0 items-center justify-center overflow-hidden rounded-2xl">
+          <section className="glass-panel relative hidden min-w-0 flex-1 basis-0 items-center justify-center overflow-hidden rounded-2xl min-[1180px]:flex">
             <AikoAvatar
               onClick={onAvatarClick}
               reactionOverride={reaction === "hearts" ? "hearts" : undefined}
@@ -443,7 +443,7 @@ function AikoApp() {
           </section>
 
           {/* Right pane */}
-          <section className="flex w-[clamp(26rem,30vw,36rem)] min-w-0 shrink-0 flex-col transition-[width] duration-300">
+          <section className="flex min-h-0 min-w-0 flex-1 flex-col transition-[width] duration-300 min-[1180px]:w-[clamp(26rem,30vw,36rem)] min-[1180px]:flex-none">
             {tab === "chat" && (
               <ChatPanel
                 onAikoSpeak={speak}
