@@ -44,6 +44,7 @@ import {
 import { useSpeechRecognition } from "@/lib/useSpeechRecognition";
 import { cn } from "@/lib/utils";
 import { API_BASE_URL, API_KEY } from "@/config/api";
+import { parseReminderIntent } from "@/lib/parseReminder";
 import { store } from "@/lib/productivity";
 
 interface ChatPanelProps {
@@ -143,8 +144,15 @@ function looksLikeReminderRefusal(text: string): boolean {
 }
 
 function normalizeReminderAt(at: number | string): number {
-  if (typeof at === "number") return at;
+  if (typeof at === "number") {
+    // Algunos backends envían segundos Unix y otros milisegundos.
+    return at > 0 && at < 10_000_000_000 ? at * 1000 : at;
+  }
   const value = at.trim();
+  if (/^\d+(?:\.\d+)?$/.test(value)) {
+    const numeric = Number(value);
+    return numeric < 10_000_000_000 ? numeric * 1000 : numeric;
+  }
   const hasTimeZone = /(?:z|[+-]\d{2}:?\d{2})$/i.test(value);
   return new Date(hasTimeZone ? value : `${value}Z`).getTime();
 }
@@ -156,6 +164,7 @@ function formatReminderWhen(at: number | string): string {
     month: "short",
     hour: "2-digit",
     minute: "2-digit",
+    hour12: true,
     timeZone: "America/Lima",
   });
 }
@@ -321,7 +330,8 @@ export function ChatPanel({
           c.messages?.length
         ) {
           const firstUser = c.messages.find((m) => m.role === "user");
-          if (firstUser?.text) return { ...c, title: makeTitle(firstUser.text) };
+          if (firstUser?.text)
+            return { ...c, title: makeTitle(firstUser.text) };
         }
         return c;
       });
@@ -403,40 +413,44 @@ export function ChatPanel({
     }));
   }, [updateActive]);
 
-  const uploadFile = useCallback(async (file: File): Promise<AttachmentItem> => {
-    const form = new FormData();
-    form.append("file", file);
-    const res = await fetch(`${API_BASE_URL}/api/upload`, {
-      method: "POST",
-      headers: { "X-API-Key": API_KEY },
-      body: form,
-    });
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(
-        `Error al subir (${res.status}): ${text || res.statusText}`,
-      );
-    }
-    const data = await res.json();
-    if (!data?.path) throw new Error("El backend no devolvió path del archivo");
+  const uploadFile = useCallback(
+    async (file: File): Promise<AttachmentItem> => {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch(`${API_BASE_URL}/api/upload`, {
+        method: "POST",
+        headers: { "X-API-Key": API_KEY },
+        body: form,
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(
+          `Error al subir (${res.status}): ${text || res.statusText}`,
+        );
+      }
+      const data = await res.json();
+      if (!data?.path)
+        throw new Error("El backend no devolvió path del archivo");
 
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result || ""));
-      reader.onerror = () => reject(new Error("No se pudo leer el archivo"));
-      reader.readAsDataURL(file);
-    });
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("No se pudo leer el archivo"));
+        reader.readAsDataURL(file);
+      });
 
-    return {
-      name: file.name,
-      kind:
-        data.kind === "image" || file.type.startsWith("image/")
-          ? "image"
-          : "file",
-      path: data.path as string,
-      dataUrl,
-    };
-  }, []);
+      return {
+        name: file.name,
+        kind:
+          data.kind === "image" || file.type.startsWith("image/")
+            ? "image"
+            : "file",
+        path: data.path as string,
+        dataUrl,
+      };
+    },
+    [],
+  );
 
   const onPickFiles = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -468,8 +482,7 @@ export function ChatPanel({
 
       const items = store.loadReminders();
       const already = items.some(
-        (r) =>
-          r.text === payload.text && Math.abs((r.at || 0) - atMs) < 30_000,
+        (r) => r.text === payload.text && Math.abs((r.at || 0) - atMs) < 30_000,
       );
       if (already) return true;
 
@@ -498,14 +511,12 @@ export function ChatPanel({
   );
 
   const sendText = useCallback(
-    async (
-      rawText: string,
-      options?: { replaceMessageId?: string },
-    ) => {
+    async (rawText: string, options?: { replaceMessageId?: string }) => {
       const text = rawText.trim();
       if (!text || !active) return;
       const replaceMessageId = options?.replaceMessageId;
       if ((typing && !replaceMessageId) || uploading) return;
+      const localReminder = parseReminderIntent(text);
 
       if (replaceMessageId) {
         requestControllerRef.current?.abort();
@@ -560,6 +571,10 @@ export function ChatPanel({
       shouldAutoScrollRef.current = true;
       setShowScrollButton(false);
 
+      if (localReminder) {
+        applyReminder({ text: localReminder.text, at: localReminder.at });
+      }
+
       const requestSerial = ++requestSerialRef.current;
       const controller = new AbortController();
       requestControllerRef.current = controller;
@@ -598,15 +613,27 @@ export function ChatPanel({
         if (requestSerial !== requestSerialRef.current) return;
         if (!data.success) throw new Error(data.error || "Backend error");
 
-        const rem = data.metadata?.reminder;
+        const backendReminder = data.metadata?.reminder;
         let replyText =
           data.response || "No pude procesar tu mensaje correctamente.";
 
-        if (rem?.at && rem.text) {
-          applyReminder({ text: rem.text, at: rem.at });
-          if (looksLikeReminderRefusal(replyText)) {
-            replyText = `Listo, Ale. Quedó el recordatorio: ${rem.text} · ${formatReminderWhen(rem.at)} ⏰`;
-          }
+        // Para frases relativas manda el cálculo local: evita que la zona
+        // horaria del servidor cambie "dentro de 5 minutos".
+        const reminder = localReminder
+          ? { text: localReminder.text, at: localReminder.at }
+          : backendReminder?.at
+            ? {
+                text: backendReminder.text || "Recordatorio",
+                at: backendReminder.at,
+              }
+            : null;
+
+        if (reminder) {
+          applyReminder(reminder);
+          const prefix = looksLikeReminderRefusal(replyText)
+            ? "Sí puedo hacerlo. Listo"
+            : "Listo";
+          replyText = `${prefix}, Ale. Te avisaré: ${reminder.text} · ${formatReminderWhen(reminder.at)} ⏰`;
         }
 
         const reply: ChatMessage = {
@@ -635,6 +662,23 @@ export function ChatPanel({
           err instanceof Error
             ? err.message
             : "Error al conectar con el backend";
+        if (localReminder) {
+          const confirmation = `Listo, Ale. El recordatorio quedó guardado en este dispositivo: ${localReminder.text} · ${formatReminderWhen(localReminder.at)} ⏰`;
+          updateActive((c) => ({
+            ...c,
+            messages: [
+              ...c.messages,
+              {
+                id: crypto.randomUUID(),
+                role: "aiko",
+                text: confirmation,
+                at: Date.now(),
+              },
+            ],
+          }));
+          if (onAikoSpeak) onAikoSpeak(confirmation);
+          return;
+        }
         setError(errorMsg);
         updateActive((c) => ({
           ...c,
@@ -896,10 +940,7 @@ export function ChatPanel({
             )
           )}
           {typing && (
-            <TypingBubble
-              regenerating={regenerating}
-              onStop={stopGenerating}
-            />
+            <TypingBubble regenerating={regenerating} onStop={stopGenerating} />
           )}
         </div>
 
@@ -1040,8 +1081,12 @@ export function ChatPanel({
             <div className="border-b border-white/10 px-4 pb-3 pt-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <h2 className="text-sm font-semibold text-foreground">Historial de conversaciones</h2>
-                  <p className="mt-0.5 text-[10px] text-muted-foreground">Busca, renombra o abre un chat anterior</p>
+                  <h2 className="text-sm font-semibold text-foreground">
+                    Historial de conversaciones
+                  </h2>
+                  <p className="mt-0.5 text-[10px] text-muted-foreground">
+                    Busca, renombra o abre un chat anterior
+                  </p>
                 </div>
                 <button
                   type="button"
@@ -1173,8 +1218,12 @@ function MessageBubble({
                     <Pencil className="h-3.5 w-3.5" />
                   </span>
                   <div className="min-w-0">
-                    <div className="text-xs font-semibold leading-tight">Editar mensaje</div>
-                    <div className="truncate text-[10px] leading-tight text-white/60">Aiko generará una respuesta nueva</div>
+                    <div className="text-xs font-semibold leading-tight">
+                      Editar mensaje
+                    </div>
+                    <div className="truncate text-[10px] leading-tight text-white/60">
+                      Aiko generará una respuesta nueva
+                    </div>
                   </div>
                 </div>
                 <button
@@ -1208,27 +1257,28 @@ function MessageBubble({
               />
               <div className="flex flex-col gap-2 border-t border-white/10 pt-2.5 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-[10px] leading-4 text-white/55">
-                  La respuesta anterior y los mensajes posteriores serán reemplazados.
+                  La respuesta anterior y los mensajes posteriores serán
+                  reemplazados.
                 </p>
                 <div className="flex shrink-0 items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditing(false);
-                    setEditText(msg.text);
-                  }}
-                  className="rounded-lg border border-white/10 px-3 py-1.5 text-[11px] font-medium text-white/75 transition hover:bg-white/10 hover:text-white"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={saveEdit}
-                  disabled={!editText.trim()}
-                  className="flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-[11px] font-semibold text-pink-700 shadow-md shadow-black/10 transition hover:bg-pink-50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <Send className="h-3 w-3" /> Guardar y enviar
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditing(false);
+                      setEditText(msg.text);
+                    }}
+                    className="rounded-lg border border-white/10 px-3 py-1.5 text-[11px] font-medium text-white/75 transition hover:bg-white/10 hover:text-white"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={saveEdit}
+                    disabled={!editText.trim()}
+                    className="flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-[11px] font-semibold text-pink-700 shadow-md shadow-black/10 transition hover:bg-pink-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Send className="h-3 w-3" /> Guardar y enviar
+                  </button>
                 </div>
               </div>
             </div>
