@@ -416,7 +416,7 @@ function AikoApp() {
           />
 
           {/* Stage — avatar */}
-          <section className="glass-panel relative flex min-w-0 flex-1 items-center justify-center overflow-hidden rounded-2xl">
+          <section className="glass-panel relative flex min-w-0 flex-1 basis-0 items-center justify-center overflow-hidden rounded-2xl">
             <AikoAvatar
               onClick={onAvatarClick}
               reactionOverride={reaction === "hearts" ? "hearts" : undefined}
@@ -443,7 +443,7 @@ function AikoApp() {
           </section>
 
           {/* Right pane */}
-          <section className="flex w-[400px] flex-col">
+          <section className="flex w-[clamp(26rem,30vw,36rem)] min-w-0 shrink-0 flex-col transition-[width] duration-300">
             {tab === "chat" && (
               <ChatPanel
                 onAikoSpeak={speak}

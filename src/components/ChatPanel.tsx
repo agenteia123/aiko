@@ -714,7 +714,7 @@ export function ChatPanel({
   }, [active?.messages]);
 
   return (
-    <div className="relative flex h-full w-full min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-[#0f1117]/95 shadow-2xl md:min-w-[26rem] xl:min-w-[30rem] 2xl:min-w-[32rem]">
+    <div className="relative flex h-full w-full min-w-0 max-w-full overflow-hidden rounded-2xl border border-white/10 bg-[#0f1117]/95 shadow-2xl">
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-14 shrink-0 items-center gap-2 border-b border-white/10 px-3 sm:px-4">
           <button
