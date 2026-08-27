@@ -87,63 +87,21 @@ function AikoModel({ reaction, onReady, dragRotation, onBodyHit }: AikoModelProp
     const rightUpperArm = vrm.humanoid?.getNormalizedBoneNode("rightUpperArm");
     const leftLowerArm = vrm.humanoid?.getNormalizedBoneNode("leftLowerArm");
     const rightLowerArm = vrm.humanoid?.getNormalizedBoneNode("rightLowerArm");
-    const leftHand = vrm.humanoid?.getNormalizedBoneNode("leftHand");
-    const rightHand = vrm.humanoid?.getNormalizedBoneNode("rightHand");
-    const smooth = 1 - Math.exp(-delta * 7);
+    const smooth = 1 - Math.exp(-delta * 5);
     const move = (current: number, target: number) =>
       current + (target - current) * smooth;
 
-    let leftUpperX = 0;
-    let rightUpperX = 0;
-    let leftUpperZ = -Math.PI * 0.38;
-    let rightUpperZ = Math.PI * 0.38;
-    let leftLowerX = 0;
-    let rightLowerX = 0;
-    let leftLowerZ = 0.1;
-    let rightLowerZ = -0.1;
-    let leftHandZ = 0;
-    let rightHandZ = 0;
-
-    if (reaction === "blush") {
-      // Postura tímida contenida: hombros cerrados, mirada baja y manos
-      // ligeramente hacia delante. Evita forzar las manos hasta el rostro.
-      leftUpperX = -0.16;
-      rightUpperX = -0.16;
-      leftUpperZ = -1.06;
-      rightUpperZ = 1.06;
-      leftLowerX = -0.22;
-      rightLowerX = -0.22;
-      leftLowerZ = 0.28;
-      rightLowerZ = -0.28;
-      leftHandZ = 0.1;
-      rightHandZ = -0.1;
-    } else if (reaction === "hearts") {
-      // Saludo pequeño a la altura del hombro, sin abrir el brazo en T.
-      rightUpperX = -0.16;
-      rightUpperZ = 0.78;
-      rightLowerX = -0.28;
-      rightLowerZ = -0.36;
-      rightHandZ = Math.sin(t * 7) * 0.14;
-      leftUpperZ = -1.15 + Math.sin(t * 4) * 0.025;
-    } else if (reaction === "angry") {
-      // Postura firme y simétrica, manteniendo los codos cerca del cuerpo.
-      leftUpperX = 0.05;
-      rightUpperX = 0.05;
-      leftUpperZ = -1.02;
-      rightUpperZ = 1.02;
-      leftLowerX = -0.08;
-      rightLowerX = -0.08;
-      leftLowerZ = 0.2;
-      rightLowerZ = -0.2;
-      leftHandZ = -0.08;
-      rightHandZ = 0.08;
-    } else {
-      // Movimiento de reposo muy suave para evitar una pose rígida.
-      leftUpperX = Math.sin(t * 0.72) * 0.018;
-      rightUpperX = -Math.sin(t * 0.72) * 0.018;
-      leftUpperZ += Math.sin(t * 0.58) * 0.018;
-      rightUpperZ -= Math.sin(t * 0.58) * 0.018;
-    }
+    // Mantener una postura estable. Solo hay micro-movimientos de respiración;
+    // las emociones se expresan con rostro, cabeza y hombros.
+    const armBreath = Math.sin(t * 0.72) * 0.006;
+    const leftUpperX = armBreath;
+    const rightUpperX = -armBreath;
+    const leftUpperZ = -Math.PI * 0.38 + armBreath;
+    const rightUpperZ = Math.PI * 0.38 - armBreath;
+    const leftLowerX = 0;
+    const rightLowerX = 0;
+    const leftLowerZ = 0.1;
+    const rightLowerZ = -0.1;
 
     if (leftUpperArm) {
       leftUpperArm.rotation.x = move(leftUpperArm.rotation.x, leftUpperX);
@@ -161,10 +119,20 @@ function AikoModel({ reaction, onReady, dragRotation, onBodyHit }: AikoModelProp
       rightLowerArm.rotation.x = move(rightLowerArm.rotation.x, rightLowerX);
       rightLowerArm.rotation.z = move(rightLowerArm.rotation.z, rightLowerZ);
     }
-    if (leftHand) leftHand.rotation.z = move(leftHand.rotation.z, leftHandZ);
-    if (rightHand) rightHand.rotation.z = move(rightHand.rotation.z, rightHandZ);
-    if (leftShoulder) leftShoulder.rotation.z = Math.sin(t * 0.9) * 0.012;
-    if (rightShoulder) rightShoulder.rotation.z = -Math.sin(t * 0.9) * 0.012;
+    const shyShoulders = reaction === "blush" ? 0.025 : 0;
+    const tenseShoulders = reaction === "angry" ? -0.018 : 0;
+    if (leftShoulder) {
+      leftShoulder.rotation.z = move(
+        leftShoulder.rotation.z,
+        Math.sin(t * 0.9) * 0.006 + shyShoulders + tenseShoulders,
+      );
+    }
+    if (rightShoulder) {
+      rightShoulder.rotation.z = move(
+        rightShoulder.rotation.z,
+        -Math.sin(t * 0.9) * 0.006 - shyShoulders - tenseShoulders,
+      );
+    }
     if (head) {
       head.rotation.y += (state.pointer.x * 0.3 - head.rotation.y) * 0.08;
       const reactionHeadX = reaction === "blush" ? 0.12 : reaction === "angry" ? 0.045 : 0;
