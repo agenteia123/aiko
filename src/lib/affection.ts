@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 
 const KEY = "aiko.affection.v2";
 const BASE = 40;
+const MAX_LEVEL_GUARD = 10_000;
 
 export interface AffectionState {
   xp: number;
@@ -26,8 +27,44 @@ export const XP_REWARDS = {
 export type XPReason = keyof typeof XP_REWARDS;
 export type AffectionPenaltyReason = "chestTouch" | "buttTouch";
 
-function todayISO() {
-  return new Date().toISOString().slice(0, 10);
+function todayISO(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function safeNumber(value: unknown, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function normalizeState(value: unknown): AffectionState {
+  const raw =
+    value && typeof value === "object"
+      ? (value as Partial<AffectionState>)
+      : {};
+  // Versiones anteriores solo guardaban `xp`. Se conserva para no perder
+  // el progreso que el usuario ya consiguió.
+  const totalXp = Math.max(
+    0,
+    Math.round(
+      Number.isFinite(Number(raw.totalXp))
+        ? safeNumber(raw.totalXp)
+        : safeNumber(raw.xp),
+    ),
+  );
+  const lastActive =
+    typeof raw.lastActive === "string" &&
+    /^\d{4}-\d{2}-\d{2}$/.test(raw.lastActive)
+      ? raw.lastActive
+      : todayISO();
+  return {
+    xp: totalXp,
+    totalXp,
+    streakDays: Math.max(0, Math.round(safeNumber(raw.streakDays))),
+    lastActive,
+  };
 }
 
 function xpForLevel(level: number) {
@@ -42,16 +79,23 @@ function xpForLevel(level: number) {
 }
 
 function levelInfo(totalXp: number) {
+  const safeTotal = Math.max(0, Math.round(safeNumber(totalXp)));
   let level = 1;
   let step = BASE;
   let acc = 0;
-  while (acc + step <= totalXp) {
+  while (acc + step <= safeTotal && level < MAX_LEVEL_GUARD) {
     acc += step;
     level++;
     step = Math.round(step * 1.25);
   }
-  const into = totalXp - acc;
-  return { level, into, needed: step, progress: into / step };
+  const into = Math.max(0, safeTotal - acc);
+  const needed = Math.max(1, step);
+  return {
+    level,
+    into,
+    needed,
+    progress: Math.max(0, Math.min(1, into / needed)),
+  };
 }
 
 export const AFFECTION_TITLES: Record<number, string> = {
@@ -61,6 +105,8 @@ export const AFFECTION_TITLES: Record<number, string> = {
   10: "Devota",
   15: "Enamorada",
   20: "Inseparable",
+  25: "Alma gemela",
+  30: "Eterna",
 };
 
 export function titleFor(level: number) {
@@ -76,7 +122,14 @@ function read(): AffectionState {
     return { xp: 0, totalXp: 0, streakDays: 0, lastActive: todayISO() };
   try {
     const raw = localStorage.getItem(KEY);
-    if (raw) return JSON.parse(raw) as AffectionState;
+    if (raw) {
+      const parsed = JSON.parse(raw) as unknown;
+      const normalized = normalizeState(parsed);
+      // Repara silenciosamente estados incompletos o de versiones antiguas.
+      if (JSON.stringify(parsed) !== JSON.stringify(normalized))
+        write(normalized);
+      return normalized;
+    }
   } catch {
     /* ignore */
   }
@@ -101,7 +154,7 @@ export function gainXP(reason: XPReason) {
   const today = todayISO();
   const y = new Date();
   y.setDate(y.getDate() - 1);
-  const yesterday = y.toISOString().slice(0, 10);
+  const yesterday = todayISO(y);
   let streak = cur.streakDays;
   if (cur.lastActive === today) {
     // same day, keep streak
@@ -121,7 +174,15 @@ export function gainXP(reason: XPReason) {
   write(next);
   const afterLevel = levelInfo(next.totalXp).level;
   window.dispatchEvent(
-    new CustomEvent(EVT, { detail: { reason, amount, state: next } }),
+    new CustomEvent(EVT, {
+      detail: {
+        reason,
+        amount,
+        state: next,
+        before: levelInfo(cur.totalXp),
+        after: levelInfo(next.totalXp),
+      },
+    }),
   );
   if (afterLevel > beforeLevel) {
     window.dispatchEvent(
@@ -150,7 +211,13 @@ export function loseXP(amount: number, reason: AffectionPenaltyReason) {
   write(next);
   window.dispatchEvent(
     new CustomEvent(EVT, {
-      detail: { reason, amount: -appliedAmount, state: next },
+      detail: {
+        reason,
+        amount: -appliedAmount,
+        state: next,
+        before: levelInfo(cur.totalXp),
+        after: levelInfo(next.totalXp),
+      },
     }),
   );
 }
