@@ -26,6 +26,8 @@ import {
   Copy,
   Check,
   Clock3,
+  Square,
+  ChevronDown,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -258,6 +260,11 @@ export function ChatPanel({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+  const [editedMessageIds, setEditedMessageIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [showScrollButton, setShowScrollButton] = useState(false);
   const [analysisLevel, setAnalysisLevel] = useState<
     "fast" | "balanced" | "deep"
   >("balanced");
@@ -273,6 +280,7 @@ export function ChatPanel({
   >(() => {});
   const requestControllerRef = useRef<AbortController | null>(null);
   const requestSerialRef = useRef(0);
+  const shouldAutoScrollRef = useRef(true);
 
   useEffect(
     () => () => {
@@ -340,8 +348,29 @@ export function ChatPanel({
 
   useEffect(() => {
     const el = scrollRef.current;
-    if (el) setTimeout(() => (el.scrollTop = el.scrollHeight), 0);
+    if (el && shouldAutoScrollRef.current) {
+      setTimeout(() => {
+        el.scrollTop = el.scrollHeight;
+        setShowScrollButton(false);
+      }, 0);
+    }
   }, [active?.messages, typing]);
+
+  const handleChatScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 140;
+    shouldAutoScrollRef.current = nearBottom;
+    setShowScrollButton(!nearBottom);
+  }, []);
+
+  const scrollToBottom = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    shouldAutoScrollRef.current = true;
+    setShowScrollButton(false);
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  }, []);
 
   const updateActive = useCallback(
     (updater: (c: Conversation) => Conversation) => {
@@ -480,6 +509,14 @@ export function ChatPanel({
 
       if (replaceMessageId) {
         requestControllerRef.current?.abort();
+        setRegenerating(true);
+        setEditedMessageIds((previous) => {
+          const next = new Set(previous);
+          next.add(replaceMessageId);
+          return next;
+        });
+      } else {
+        setRegenerating(false);
       }
 
       setError(null);
@@ -520,6 +557,8 @@ export function ChatPanel({
       setInput("");
       setAttachments([]);
       setTyping(true);
+      shouldAutoScrollRef.current = true;
+      setShowScrollButton(false);
 
       const requestSerial = ++requestSerialRef.current;
       const controller = new AbortController();
@@ -613,6 +652,7 @@ export function ChatPanel({
         if (requestSerial === requestSerialRef.current) {
           requestControllerRef.current = null;
           setTyping(false);
+          setRegenerating(false);
         }
       }
     },
@@ -639,6 +679,16 @@ export function ChatPanel({
   function send() {
     if (input.trim() && !uploading && !typing) sendText(input);
   }
+
+  const stopGenerating = useCallback(() => {
+    if (!requestControllerRef.current) return;
+    requestControllerRef.current.abort();
+    requestControllerRef.current = null;
+    requestSerialRef.current += 1;
+    setTyping(false);
+    setRegenerating(false);
+    toast.message("Respuesta detenida");
+  }, []);
 
   function onKey(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -793,6 +843,7 @@ export function ChatPanel({
 
         <div
           ref={scrollRef}
+          onScroll={handleChatScroll}
           className="min-w-0 flex-1 space-y-5 overflow-x-hidden overflow-y-auto px-2.5 py-5 sm:px-6 lg:px-8"
         >
           {timeline.length === 0 ? (
@@ -838,13 +889,31 @@ export function ChatPanel({
                 <MessageBubble
                   key={item.msg!.id}
                   msg={item.msg!}
+                  edited={editedMessageIds.has(item.msg!.id)}
                   onEdit={item.msg!.role === "user" ? editAndResend : undefined}
                 />
               ),
             )
           )}
-          {typing && <TypingBubble />}
+          {typing && (
+            <TypingBubble
+              regenerating={regenerating}
+              onStop={stopGenerating}
+            />
+          )}
         </div>
+
+        {showScrollButton && !historyOpen && (
+          <button
+            type="button"
+            onClick={scrollToBottom}
+            className="absolute bottom-28 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-white/10 bg-[#20232e]/95 px-3 py-2 text-[11px] font-medium text-foreground shadow-xl shadow-black/30 backdrop-blur transition hover:border-primary/35 hover:bg-[#292d3a]"
+            title="Ir al mensaje más reciente"
+          >
+            <ChevronDown className="h-3.5 w-3.5 text-primary" />
+            <span className="hidden sm:inline">Ir al final</span>
+          </button>
+        )}
 
         <div className="border-t border-white/10 bg-[#0f1117]/80 p-3 sm:p-4">
           {attachments.length > 0 && (
@@ -934,18 +1003,20 @@ export function ChatPanel({
             />
 
             <button
-              onClick={send}
-              disabled={!input.trim() || typing || uploading}
+              onClick={typing ? stopGenerating : send}
+              disabled={typing ? false : !input.trim() || uploading}
               className={cn(
                 "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition",
-                input.trim() && !typing && !uploading
-                  ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
-                  : "cursor-not-allowed bg-white/5 text-muted-foreground",
+                typing
+                  ? "bg-red-500/15 text-red-300 ring-1 ring-red-400/25 hover:bg-red-500/25"
+                  : input.trim() && !uploading
+                    ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
+                    : "cursor-not-allowed bg-white/5 text-muted-foreground",
               )}
-              title="Enviar"
+              title={typing ? "Detener respuesta" : "Enviar"}
             >
               {typing ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Square className="h-3.5 w-3.5 fill-current" />
               ) : (
                 <Send className="h-4 w-4" />
               )}
@@ -1024,9 +1095,11 @@ export function ChatPanel({
 function MessageBubble({
   msg,
   onEdit,
+  edited = false,
 }: {
   msg: ChatMessage;
   onEdit?: (messageId: string, newText: string) => void;
+  edited?: boolean;
 }) {
   const isUser = msg.role === "user";
   const [copied, setCopied] = useState(false);
@@ -1163,6 +1236,11 @@ function MessageBubble({
             <div className="group/user">
               <p className="whitespace-pre-wrap break-words">{msg.text}</p>
               <div className="mt-1.5 flex items-center justify-end gap-2 text-[10px] text-white/65">
+                {edited && (
+                  <span className="rounded-full bg-white/10 px-1.5 py-0.5 font-medium text-white/75">
+                    Editado
+                  </span>
+                )}
                 <span>{formatHistoryTime(msg.at)}</span>
                 {onEdit && (
                   <button
@@ -1182,7 +1260,11 @@ function MessageBubble({
           )
         ) : (
           <>
-            <div className="flex items-center justify-end border-b border-white/[0.07] pb-2">
+            <div className="flex items-center justify-between gap-3 border-b border-white/[0.07] pb-2">
+              <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/75">
+                <Clock3 className="h-3 w-3" />
+                {formatHistoryTime(msg.at)}
+              </span>
               <button
                 type="button"
                 onClick={copyMessage}
@@ -1427,15 +1509,23 @@ function MarkdownTable({ children }: { children: ReactNode }) {
   );
 }
 
-function TypingBubble() {
+function TypingBubble({
+  regenerating,
+  onStop,
+}: {
+  regenerating: boolean;
+  onStop: () => void;
+}) {
   return (
     <div className="flex items-center gap-3">
       <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/20 ring-1 ring-primary/25">
         <Heart className="h-3.5 w-3.5 fill-primary text-primary" />
       </div>
-      <div className="flex items-center gap-2 rounded-2xl rounded-bl-md border border-white/10 bg-[#1a1d27] px-4 py-3">
+      <div className="flex items-center gap-2 rounded-2xl rounded-bl-md border border-white/10 bg-[#1a1d27] px-4 py-2.5 shadow-lg shadow-black/10">
         <span className="text-xs text-muted-foreground">
-          Aiko está escribiendo
+          {regenerating
+            ? "Aiko está preparando una respuesta nueva"
+            : "Aiko está escribiendo"}
         </span>
         <span className="flex gap-1">
           <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary/80" />
@@ -1448,6 +1538,15 @@ function TypingBubble() {
             style={{ animationDelay: "0.3s" }}
           />
         </span>
+        <button
+          type="button"
+          onClick={onStop}
+          className="ml-1 flex h-7 w-7 items-center justify-center rounded-lg bg-red-500/10 text-red-300 transition hover:bg-red-500/20"
+          title="Detener respuesta"
+          aria-label="Detener respuesta"
+        >
+          <Square className="h-3 w-3 fill-current" />
+        </button>
       </div>
     </div>
   );
