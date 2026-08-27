@@ -4,12 +4,13 @@ import { Canvas, useFrame, useLoader, useThree } from "@react-three/fiber";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { VRMLoaderPlugin, type VRM } from "@pixiv/three-vrm";
 import type { Group, Object3D } from "three";
-import { useAffection } from "@/lib/affection";
+import { loseXP, useAffection } from "@/lib/affection";
 
-type Reaction = "idle" | "blush" | "hearts";
+type Reaction = "idle" | "blush" | "hearts" | "angry";
 
 interface AikoAvatarProps {
   onClick?: () => void;
+  onAffectionChange?: (amount: number, reason: "head" | "body" | "chest" | "butt") => void;
   reactionOverride?: Reaction;
 }
 
@@ -24,8 +25,8 @@ const MODEL_URL = "/models/aiko_proti.vrm";
 function CameraRig() {
   const { camera, size } = useThree();
   useEffect(() => {
-    camera.position.set(0, size.width < 600 ? 1.03 : 1.08, size.width < 600 ? 3.45 : 3.05);
-    camera.lookAt(0, 0.82, 0);
+    camera.position.set(0, size.width < 600 ? 1.12 : 1.18, size.width < 600 ? 2.75 : 2.35);
+    camera.lookAt(0, 1.02, 0);
     camera.updateProjectionMatrix();
   }, [camera, size.width]);
   return null;
@@ -67,7 +68,7 @@ function AikoModel({ reaction, onReady, dragRotation }: AikoModelProps) {
     const t = elapsed.current;
 
     if (modelRoot.current) {
-      modelRoot.current.position.y = -0.76 + Math.sin(t * 1.25) * 0.008;
+      modelRoot.current.position.y = -0.53 + Math.sin(t * 1.25) * 0.008;
       modelRoot.current.rotation.x += (dragRotation.current.x - modelRoot.current.rotation.x) * 0.1;
       modelRoot.current.rotation.y += (dragRotation.current.y - modelRoot.current.rotation.y) * 0.1;
       modelRoot.current.rotation.z = Math.sin(t * 0.42) * 0.008;
@@ -90,6 +91,7 @@ function AikoModel({ reaction, onReady, dragRotation }: AikoModelProps) {
     if (expressions) {
       expressions.setValue("blink", blink);
       expressions.setValue("happy", reaction === "hearts" ? 0.82 : reaction === "blush" ? 0.28 : 0.08);
+      expressions.setValue("angry", reaction === "angry" ? 0.72 : 0);
       expressions.setValue("relaxed", reaction === "idle" ? 0.12 : 0);
       expressions.setValue("surprised", reaction === "hearts" ? 0.08 : 0);
     }
@@ -99,17 +101,19 @@ function AikoModel({ reaction, onReady, dragRotation }: AikoModelProps) {
   });
 
   return (
-    <group ref={modelRoot} position={[0, -0.76, 0]}>
+    <group ref={modelRoot} position={[0, -0.53, 0]}>
       <primitive object={vrm.scene} />
     </group>
   );
 }
 
-export function AikoAvatar({ onClick, reactionOverride }: AikoAvatarProps) {
+export function AikoAvatar({ onClick, onAffectionChange, reactionOverride }: AikoAvatarProps) {
   const [reaction, setReaction] = useState<Reaction>("idle");
   const [ready, setReady] = useState(false);
   const [hearts, setHearts] = useState<number[]>([]);
+  const [thought, setThought] = useState<string | null>(null);
   const resetTimer = useRef<number | null>(null);
+  const thoughtTimer = useRef<number | null>(null);
   const dragRotation = useRef({ x: 0, y: 0 });
   const drag = useRef({ active: false, moved: false, x: 0, y: 0 });
   const affection = useAffection();
@@ -117,18 +121,36 @@ export function AikoAvatar({ onClick, reactionOverride }: AikoAvatarProps) {
 
   useEffect(() => () => {
     if (resetTimer.current) window.clearTimeout(resetTimer.current);
+    if (thoughtTimer.current) window.clearTimeout(thoughtTimer.current);
   }, []);
 
-  function handleClick() {
-    setReaction("hearts");
+  function handleClick(bodyPart: "head" | "body" | "chest" | "butt" = "body") {
+    const inappropriateTouch = bodyPart === "chest" || bodyPart === "butt";
+    const affectionAmount = bodyPart === "chest" ? -15 : bodyPart === "butt" ? -25 : 2;
+    const messages = {
+      head: ["Eso sí me gusta…", "Je, je… gracias."],
+      body: ["¡Hola, Alejandro!", "Estoy aquí contigo."],
+      chest: ["¡Pervertido!", "¡Oye! No me toques ahí."],
+      butt: ["¡¿Qué estás haciendo?!", "¡Eso te costará mucho cariño!"],
+    } as const;
+
+    setReaction(inappropriateTouch ? "angry" : "hearts");
     const id = Date.now();
-    setHearts([id, id + 1, id + 2, id + 3, id + 4]);
+    setHearts(inappropriateTouch ? [] : [id, id + 1, id + 2, id + 3, id + 4]);
+    const options = messages[bodyPart];
+    setThought(options[Math.floor(Math.random() * options.length)]);
+    if (thoughtTimer.current) window.clearTimeout(thoughtTimer.current);
+    thoughtTimer.current = window.setTimeout(() => setThought(null), 2600);
+
     if (resetTimer.current) window.clearTimeout(resetTimer.current);
     resetTimer.current = window.setTimeout(() => {
       setReaction("idle");
       setHearts([]);
     }, 1700);
-    onClick?.();
+    if (bodyPart === "chest") loseXP(15, "chestTouch");
+    else if (bodyPart === "butt") loseXP(25, "buttTouch");
+    else onClick?.();
+    onAffectionChange?.(affectionAmount, bodyPart);
   }
 
   function handlePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
@@ -155,7 +177,18 @@ export function AikoAvatar({ onClick, reactionOverride }: AikoAvatarProps) {
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
-    if (wasClick) handleClick();
+    if (wasClick) {
+      const bounds = event.currentTarget.getBoundingClientRect();
+      const relativeX = (event.clientX - bounds.left) / bounds.width;
+      const relativeY = (event.clientY - bounds.top) / bounds.height;
+      const centered = relativeX >= 0.36 && relativeX <= 0.64;
+      const facingBack = Math.cos(dragRotation.current.y) < -0.25;
+      let bodyPart: "head" | "body" | "chest" | "butt" = "body";
+      if (centered && relativeY >= 0.25 && relativeY < 0.45) bodyPart = "head";
+      else if (centered && facingBack && relativeY >= 0.57 && relativeY < 0.78) bodyPart = "butt";
+      else if (centered && !facingBack && relativeY >= 0.45 && relativeY < 0.67) bodyPart = "chest";
+      handleClick(bodyPart);
+    }
   }
 
   const glowOpacity = Math.min(0.72, 0.34 + affection.level * 0.035);
@@ -193,7 +226,7 @@ export function AikoAvatar({ onClick, reactionOverride }: AikoAvatarProps) {
       >
         <Canvas
           dpr={[1, 1.5]}
-          camera={{ fov: 28, near: 0.1, far: 20, position: [0, 1.08, 3.05] }}
+          camera={{ fov: 27, near: 0.1, far: 20, position: [0, 1.18, 2.35] }}
           gl={{ alpha: true, antialias: true, powerPreference: "high-performance" }}
           onCreated={({ gl }) => gl.setClearColor(0x000000, 0)}
         >
@@ -218,6 +251,15 @@ export function AikoAvatar({ onClick, reactionOverride }: AikoAvatarProps) {
       {hearts.map((heart, index) => (
         <span key={heart} className="pointer-events-none absolute z-30 text-2xl text-pink-300 drop-shadow-[0_0_12px_rgba(249,168,212,.9)]" style={{ left: `${41 + index * 4.5}%`, top: "35%", animation: `aiko-float-heart ${1.25 + index * 0.12}s ease-out forwards`, animationDelay: `${index * 70}ms` }}>♥</span>
       ))}
+
+      {thought && (
+        <div className="pointer-events-none absolute left-1/2 top-[12%] z-40 w-[min(88%,22rem)] -translate-x-1/2 animate-in fade-in zoom-in-95 duration-200 sm:left-[66%] sm:top-[18%] sm:w-auto sm:max-w-[18rem] sm:translate-x-0">
+          <div className="relative rounded-2xl border border-pink-200/30 bg-slate-950/90 px-4 py-3 text-center text-sm font-semibold leading-snug text-pink-50 shadow-[0_14px_45px_rgba(0,0,0,.5),0_0_28px_rgba(244,114,182,.22)] backdrop-blur-xl sm:text-left">
+            {thought}
+            <span className="absolute -bottom-2 left-1/2 h-4 w-4 -translate-x-1/2 rotate-45 border-b border-r border-pink-200/30 bg-slate-950/90 sm:left-5 sm:translate-x-0" />
+          </div>
+        </div>
+      )}
 
       <div className="pointer-events-none absolute bottom-[7%] left-1/2 z-0 h-10 w-[min(42vw,30rem)] -translate-x-1/2 rounded-[50%] border border-cyan-200/10 bg-cyan-300/[0.04] shadow-[0_0_55px_rgba(34,211,238,.15)] sm:bottom-[10%]" />
       <div className="pointer-events-none absolute bottom-5 right-5 z-20 hidden rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-[9px] uppercase tracking-[0.16em] text-white/40 backdrop-blur-md md:block">Clic: alegrar · Arrastrar: girar</div>

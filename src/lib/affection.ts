@@ -24,6 +24,7 @@ export const XP_REWARDS = {
 } as const;
 
 export type XPReason = keyof typeof XP_REWARDS;
+export type AffectionPenaltyReason = "chestTouch" | "buttTouch";
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -127,6 +128,31 @@ export function gainXP(reason: XPReason) {
       new CustomEvent(LEVEL_EVT, { detail: { level: afterLevel } }),
     );
   }
+}
+
+// Removes affection without ever allowing XP to become negative.
+// It emits the same event as gainXP so every counter, glow and progress bar
+// refreshes immediately.
+export function loseXP(amount: number, reason: AffectionPenaltyReason) {
+  if (typeof window === "undefined") return;
+  const penalty = Math.max(0, Math.abs(Math.round(amount)));
+  if (penalty === 0) return;
+
+  const cur = read();
+  const nextTotal = Math.max(0, cur.totalXp - penalty);
+  const appliedAmount = cur.totalXp - nextTotal;
+  const next: AffectionState = {
+    ...cur,
+    totalXp: nextTotal,
+    xp: nextTotal,
+  };
+
+  write(next);
+  window.dispatchEvent(
+    new CustomEvent(EVT, {
+      detail: { reason, amount: -appliedAmount, state: next },
+    }),
+  );
 }
 
 export function useAffection() {
