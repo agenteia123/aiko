@@ -27,7 +27,7 @@ const MODEL_URL = "/models/aiko_proti.vrm";
 function CameraRig() {
   const { camera, size } = useThree();
   useEffect(() => {
-    camera.position.set(0, size.width < 600 ? 1.05 : 1.08, size.width < 600 ? 3.05 : 2.62);
+    camera.position.set(0, size.width < 600 ? 1.05 : 1.08, size.width < 600 ? 3.15 : 2.78);
     camera.lookAt(0, 0.9, 0);
     camera.updateProjectionMatrix();
   }, [camera, size.width]);
@@ -70,7 +70,9 @@ function AikoModel({ reaction, onReady, dragRotation, onBodyHit }: AikoModelProp
     const t = elapsed.current;
 
     if (modelRoot.current) {
-      modelRoot.current.position.y = -0.34 + Math.sin(t * 1.25) * 0.008;
+      const happyBounce = reaction === "hearts" ? Math.abs(Math.sin(t * 4.5)) * 0.009 : 0;
+      modelRoot.current.position.x = Math.sin(t * 0.38) * 0.006;
+      modelRoot.current.position.y = -0.34 + Math.sin(t * 1.25) * 0.007 + happyBounce;
       modelRoot.current.rotation.x += (dragRotation.current.x - modelRoot.current.rotation.x) * 0.1;
       modelRoot.current.rotation.y += (dragRotation.current.y - modelRoot.current.rotation.y) * 0.1;
       modelRoot.current.rotation.z = Math.sin(t * 0.42) * 0.008;
@@ -103,35 +105,38 @@ function AikoModel({ reaction, onReady, dragRotation, onBodyHit }: AikoModelProp
     let rightHandZ = 0;
 
     if (reaction === "blush") {
-      // Ambas manos suben hacia el rostro y Aiko baja la mirada.
-      leftUpperX = -0.72;
-      rightUpperX = -0.72;
-      leftUpperZ = 0.38;
-      rightUpperZ = -0.38;
-      leftLowerX = -1.05;
-      rightLowerX = -1.05;
-      leftLowerZ = 0.72;
-      rightLowerZ = -0.72;
-      leftHandZ = -0.28;
-      rightHandZ = 0.28;
+      // Postura tímida contenida: hombros cerrados, mirada baja y manos
+      // ligeramente hacia delante. Evita forzar las manos hasta el rostro.
+      leftUpperX = -0.16;
+      rightUpperX = -0.16;
+      leftUpperZ = -1.06;
+      rightUpperZ = 1.06;
+      leftLowerX = -0.22;
+      rightLowerX = -0.22;
+      leftLowerZ = 0.28;
+      rightLowerZ = -0.28;
+      leftHandZ = 0.1;
+      rightHandZ = -0.1;
     } else if (reaction === "hearts") {
-      // Saludo alegre con la mano derecha y un pequeño rebote corporal.
-      rightUpperX = -0.32;
-      rightUpperZ = -0.35;
-      rightLowerX = -0.82;
-      rightLowerZ = -0.62;
-      rightHandZ = Math.sin(t * 8) * 0.24;
-      leftUpperZ += Math.sin(t * 4) * 0.035;
+      // Saludo pequeño a la altura del hombro, sin abrir el brazo en T.
+      rightUpperX = -0.16;
+      rightUpperZ = 0.78;
+      rightLowerX = -0.28;
+      rightLowerZ = -0.36;
+      rightHandZ = Math.sin(t * 7) * 0.14;
+      leftUpperZ = -1.15 + Math.sin(t * 4) * 0.025;
     } else if (reaction === "angry") {
-      // Postura firme: codos abiertos y manos cerca de la cintura.
-      leftUpperX = 0.12;
-      rightUpperX = 0.12;
-      leftUpperZ = -0.72;
-      rightUpperZ = 0.72;
-      leftLowerX = -0.2;
-      rightLowerX = -0.2;
-      leftLowerZ = -0.92;
-      rightLowerZ = 0.92;
+      // Postura firme y simétrica, manteniendo los codos cerca del cuerpo.
+      leftUpperX = 0.05;
+      rightUpperX = 0.05;
+      leftUpperZ = -1.02;
+      rightUpperZ = 1.02;
+      leftLowerX = -0.08;
+      rightLowerX = -0.08;
+      leftLowerZ = 0.2;
+      rightLowerZ = -0.2;
+      leftHandZ = -0.08;
+      rightHandZ = 0.08;
     } else {
       // Movimiento de reposo muy suave para evitar una pose rígida.
       leftUpperX = Math.sin(t * 0.72) * 0.018;
@@ -162,10 +167,12 @@ function AikoModel({ reaction, onReady, dragRotation, onBodyHit }: AikoModelProp
     if (rightShoulder) rightShoulder.rotation.z = -Math.sin(t * 0.9) * 0.012;
     if (head) {
       head.rotation.y += (state.pointer.x * 0.3 - head.rotation.y) * 0.08;
-      const reactionHeadX = reaction === "blush" ? 0.18 : reaction === "angry" ? 0.06 : 0;
+      const reactionHeadX = reaction === "blush" ? 0.12 : reaction === "angry" ? 0.045 : 0;
       head.rotation.x +=
         (reactionHeadX - state.pointer.y * 0.16 - head.rotation.x) * 0.08;
-      head.rotation.z += (-state.pointer.x * 0.06 - head.rotation.z) * 0.06;
+      const reactionHeadZ = reaction === "blush" ? 0.075 : 0;
+      head.rotation.z +=
+        (reactionHeadZ - state.pointer.x * 0.06 - head.rotation.z) * 0.06;
     }
     if (neck) neck.rotation.y += (state.pointer.x * 0.08 - neck.rotation.y) * 0.04;
     if (chest) {
@@ -336,7 +343,7 @@ export function AikoAvatar({ onClick, onAffectionChange, reactionOverride }: Aik
 
   return (
     <div className="relative isolate flex h-full min-h-[32rem] w-full items-center justify-center overflow-hidden select-none">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_42%,rgba(255,91,164,0.14),transparent_31%),radial-gradient(circle_at_50%_76%,rgba(34,211,238,0.11),transparent_34%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,rgba(255,115,184,0.16),transparent_28%),radial-gradient(circle_at_50%_77%,rgba(45,212,239,0.13),transparent_36%),linear-gradient(180deg,rgba(255,255,255,0.018),transparent_45%,rgba(2,8,23,0.08))]" />
       <div className="pointer-events-none absolute left-1/2 top-[54%] aspect-square w-[min(68vh,43rem)] -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/[0.055]" />
       <div className="pointer-events-none absolute left-1/2 top-[54%] aspect-square w-[min(52vh,33rem)] -translate-x-1/2 -translate-y-1/2 rounded-full border border-pink-300/[0.08]" />
       <div className="pointer-events-none absolute left-1/2 top-5 z-20 hidden -translate-x-1/2 items-center gap-3 rounded-full border border-white/10 bg-slate-950/35 px-4 py-2 shadow-xl backdrop-blur-md sm:flex">
@@ -368,7 +375,7 @@ export function AikoAvatar({ onClick, onAffectionChange, reactionOverride }: Aik
       >
         <Canvas
           dpr={[1, 1.5]}
-          camera={{ fov: 28, near: 0.1, far: 20, position: [0, 1.08, 2.62] }}
+          camera={{ fov: 28, near: 0.1, far: 20, position: [0, 1.08, 2.78] }}
           gl={{ alpha: true, antialias: true, powerPreference: "high-performance" }}
           onCreated={({ gl }) => gl.setClearColor(0x000000, 0)}
         >
