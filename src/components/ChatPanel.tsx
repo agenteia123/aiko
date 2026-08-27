@@ -4,6 +4,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ReactNode,
 } from "react";
 import {
   Send,
@@ -22,6 +23,8 @@ import {
   Heart,
   Download,
   FileText,
+  Copy,
+  Check,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -186,6 +189,23 @@ function extractDocLinks(text: string): { url: string; label: string }[] {
     seen.add(l.url);
     return true;
   });
+}
+
+async function copyToClipboard(text: string): Promise<void> {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  document.body.removeChild(textarea);
 }
 
 export function ChatPanel({
@@ -888,7 +908,18 @@ export function ChatPanel({
 
 function MessageBubble({ msg }: { msg: ChatMessage }) {
   const isUser = msg.role === "user";
+  const [copied, setCopied] = useState(false);
   const docs = !isUser ? extractDocLinks(msg.text) : [];
+
+  const copyMessage = async () => {
+    try {
+      await copyToClipboard(msg.text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      toast.error("No se pudo copiar la respuesta");
+    }
+  };
 
   let displayText = msg.text;
   if (docs.length) {
@@ -928,6 +959,28 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
           <p className="whitespace-pre-wrap break-words">{msg.text}</p>
         ) : (
           <>
+            <div className="flex items-center justify-end border-b border-white/[0.07] pb-2">
+              <button
+                type="button"
+                onClick={copyMessage}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition",
+                  copied
+                    ? "bg-emerald-500/15 text-emerald-300"
+                    : "text-muted-foreground hover:bg-white/[0.06] hover:text-foreground",
+                )}
+                title="Copiar toda la respuesta"
+                aria-label="Copiar toda la respuesta"
+              >
+                {copied ? (
+                  <Check className="h-3.5 w-3.5" />
+                ) : (
+                  <Copy className="h-3.5 w-3.5" />
+                )}
+                <span>{copied ? "Copiado" : "Copiar respuesta"}</span>
+              </button>
+            </div>
+
             {displayText && (
               <div className="min-w-0 max-w-none overflow-hidden break-words text-[13.5px] leading-6 text-foreground/90 sm:text-sm">
                 <ReactMarkdown
@@ -1008,11 +1061,7 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
                       </pre>
                     ),
                     table: ({ children }) => (
-                      <div className="my-4 max-w-full overflow-x-auto rounded-xl border border-white/10 bg-black/15 shadow-inner [scrollbar-color:rgba(255,77,154,.45)_transparent] [scrollbar-width:thin]">
-                        <table className="w-full min-w-[34rem] table-auto border-collapse text-left text-[12px] leading-5 sm:text-[13px]">
-                          {children}
-                        </table>
-                      </div>
+                      <MarkdownTable>{children}</MarkdownTable>
                     ),
                     thead: ({ children }) => (
                       <thead className="bg-white/[0.07] text-foreground">
@@ -1089,6 +1138,67 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
             ))}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function MarkdownTable({ children }: { children: ReactNode }) {
+  const [copied, setCopied] = useState(false);
+  const tableRef = useRef<HTMLTableElement>(null);
+
+  const copyTable = async () => {
+    const table = tableRef.current;
+    if (!table) return;
+
+    const rows = Array.from(table.rows).map((row) =>
+      Array.from(row.cells)
+        .map((cell) => cell.innerText.replace(/\s+/g, " ").trim())
+        .join("\t"),
+    );
+
+    try {
+      await copyToClipboard(rows.join("\n"));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      toast.error("No se pudo copiar el cuadro");
+    }
+  };
+
+  return (
+    <div className="my-4 max-w-full overflow-hidden rounded-xl border border-white/10 bg-black/15 shadow-inner">
+      <div className="flex items-center justify-between border-b border-white/[0.08] bg-white/[0.035] px-3 py-2">
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80">
+          Cuadro
+        </span>
+        <button
+          type="button"
+          onClick={copyTable}
+          className={cn(
+            "flex items-center gap-1.5 rounded-md px-2 py-1 text-[10px] font-medium transition",
+            copied
+              ? "bg-emerald-500/15 text-emerald-300"
+              : "text-muted-foreground hover:bg-white/[0.07] hover:text-foreground",
+          )}
+          title="Copiar este cuadro"
+          aria-label="Copiar este cuadro"
+        >
+          {copied ? (
+            <Check className="h-3 w-3" />
+          ) : (
+            <Copy className="h-3 w-3" />
+          )}
+          {copied ? "Copiado" : "Copiar cuadro"}
+        </button>
+      </div>
+      <div className="max-w-full overflow-x-auto [scrollbar-color:rgba(255,77,154,.45)_transparent] [scrollbar-width:thin]">
+        <table
+          ref={tableRef}
+          className="w-full min-w-[34rem] table-auto border-collapse text-left text-[12px] leading-5 sm:text-[13px]"
+        >
+          {children}
+        </table>
       </div>
     </div>
   );
