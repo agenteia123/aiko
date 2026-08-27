@@ -714,7 +714,7 @@ export function ChatPanel({
   }, [active?.messages]);
 
   return (
-    <div className="relative flex h-full overflow-hidden rounded-2xl border border-white/10 bg-[#0f1117]/95 shadow-2xl">
+    <div className="relative flex h-full w-full min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-[#0f1117]/95 shadow-2xl md:min-w-[26rem] xl:min-w-[30rem] 2xl:min-w-[32rem]">
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-14 shrink-0 items-center gap-2 border-b border-white/10 px-3 sm:px-4">
           <button
@@ -965,7 +965,7 @@ export function ChatPanel({
             onClick={() => setHistoryOpen(false)}
             aria-label="Cerrar historial"
           />
-          <aside className="absolute inset-y-0 right-0 z-30 flex w-[min(100%,20rem)] flex-col border-l border-white/10 bg-[#151821] shadow-2xl">
+          <aside className="absolute inset-y-0 right-0 z-30 flex w-[min(100%,23rem)] flex-col border-l border-white/10 bg-[#151821] shadow-2xl">
             <div className="flex items-center gap-2 border-b border-white/10 px-3 py-3">
               <div className="relative flex-1">
                 <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -1077,13 +1077,37 @@ function MessageBubble({
         className={cn(
           "min-w-0 space-y-3 rounded-2xl text-[13.5px] leading-6 sm:text-sm",
           isUser
-            ? "max-w-[88%] rounded-br-md bg-[#ff4d9a] px-4 py-3 text-white shadow-md shadow-pink-500/15 sm:max-w-[75%]"
+            ? editing
+              ? "w-full max-w-2xl rounded-br-md border border-pink-300/20 bg-gradient-to-br from-[#c82f73] to-[#9f255f] px-3.5 py-3.5 text-white shadow-xl shadow-pink-950/25 sm:px-4"
+              : "max-w-[88%] rounded-br-md bg-[#ff4d9a] px-4 py-3 text-white shadow-md shadow-pink-500/15 sm:max-w-[78%]"
             : "w-full max-w-4xl rounded-bl-md border border-white/10 bg-[#1a1d27] px-3.5 py-4 text-foreground shadow-lg shadow-black/10 sm:px-5",
         )}
       >
         {isUser ? (
           editing ? (
-            <div className="space-y-2">
+            <div className="min-w-0 space-y-3">
+              <div className="flex items-start justify-between gap-3 border-b border-white/15 pb-2.5">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/12 ring-1 ring-white/15">
+                    <Pencil className="h-3.5 w-3.5" />
+                  </span>
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold leading-tight">Editar mensaje</div>
+                    <div className="truncate text-[10px] leading-tight text-white/60">Aiko generará una respuesta nueva</div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditing(false);
+                    setEditText(msg.text);
+                  }}
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-white/65 transition hover:bg-white/10 hover:text-white"
+                  title="Cancelar edición"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
               <textarea
                 autoFocus
                 value={editText}
@@ -1099,16 +1123,20 @@ function MessageBubble({
                   }
                 }}
                 rows={Math.min(6, Math.max(2, editText.split("\n").length))}
-                className="min-h-[4.5rem] w-[min(72vw,34rem)] resize-y rounded-xl border border-white/25 bg-black/20 px-3 py-2 text-sm text-white outline-none placeholder:text-white/50 focus:border-white/50"
+                className="min-h-[6rem] w-full min-w-0 resize-y rounded-xl border border-white/20 bg-[#16151f]/55 px-3.5 py-3 text-sm leading-6 text-white shadow-inner outline-none placeholder:text-white/45 transition focus:border-pink-100/45 focus:bg-[#16151f]/70 focus:ring-2 focus:ring-white/10"
               />
-              <div className="flex items-center justify-end gap-2">
+              <div className="flex flex-col gap-2 border-t border-white/10 pt-2.5 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-[10px] leading-4 text-white/55">
+                  La respuesta anterior y los mensajes posteriores serán reemplazados.
+                </p>
+                <div className="flex shrink-0 items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => {
                     setEditing(false);
                     setEditText(msg.text);
                   }}
-                  className="rounded-lg px-2.5 py-1 text-[11px] font-medium text-white/75 transition hover:bg-white/10 hover:text-white"
+                  className="rounded-lg border border-white/10 px-3 py-1.5 text-[11px] font-medium text-white/75 transition hover:bg-white/10 hover:text-white"
                 >
                   Cancelar
                 </button>
@@ -1116,10 +1144,11 @@ function MessageBubble({
                   type="button"
                   onClick={saveEdit}
                   disabled={!editText.trim()}
-                  className="flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1 text-[11px] font-semibold text-pink-600 transition hover:bg-pink-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-[11px] font-semibold text-pink-700 shadow-md shadow-black/10 transition hover:bg-pink-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Send className="h-3 w-3" /> Guardar y enviar
                 </button>
+                </div>
               </div>
             </div>
           ) : (
