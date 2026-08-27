@@ -111,7 +111,7 @@ export function AikoSidebar({
   return (
     <aside
       className={cn(
-        "relative flex h-full flex-col rounded-2xl border border-white/10 bg-[#14161f]/95 shadow-xl transition-all duration-300",
+        "relative flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#14161f]/95 shadow-xl shadow-black/20 transition-all duration-300 before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-28 before:bg-gradient-to-b before:from-primary/[0.08] before:to-transparent",
         expanded ? "w-56" : "w-[4.25rem]",
       )}
     >
@@ -122,13 +122,19 @@ export function AikoSidebar({
           !expanded && "justify-center px-2",
         )}
       >
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md shadow-primary/25">
-          <Heart className="h-4 w-4 fill-current" />
+        <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-pink-400 via-primary to-cyan-400 p-px shadow-lg shadow-primary/25">
+          <div className="flex h-full w-full items-center justify-center rounded-[15px] bg-[#191b25]">
+            <Heart className="h-4 w-4 fill-pink-300 text-pink-300 drop-shadow-[0_0_8px_rgba(249,168,212,0.65)]" />
+          </div>
+          <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-[#14161f] bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
         </div>
         {expanded && (
           <div className="min-w-0">
-            <div className="text-[15px] font-semibold tracking-tight text-foreground">
+            <div className="flex items-center gap-2 text-[15px] font-semibold tracking-tight text-foreground">
               Aiko
+              <span className="rounded-full border border-emerald-400/15 bg-emerald-400/10 px-1.5 py-0.5 text-[8px] font-medium uppercase tracking-wider text-emerald-300">
+                online
+              </span>
             </div>
             <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
               companion · v0.2

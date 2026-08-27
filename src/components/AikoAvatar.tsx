@@ -98,13 +98,32 @@ export function AikoAvatar({ onClick, reactionOverride }: AikoAvatarProps) {
   return (
     <div
       ref={wrapRef}
-      className="relative flex h-full w-full items-end justify-center select-none"
+      className="relative isolate flex h-full min-h-[32rem] w-full items-center justify-center overflow-hidden select-none"
       onMouseEnter={() => setHovering(true)}
       onMouseLeave={() => setHovering(false)}
     >
+      {/* Escenario ambiental: concentra la mirada en Aiko sin recargarla. */}
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_48%,rgba(255,91,164,0.11),transparent_32%),radial-gradient(circle_at_50%_80%,rgba(34,211,238,0.09),transparent_35%)]" />
+      <div className="pointer-events-none absolute left-1/2 top-1/2 aspect-square w-[min(74vh,46rem)] -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/[0.055]" />
+      <div className="pointer-events-none absolute left-1/2 top-1/2 aspect-square w-[min(58vh,36rem)] -translate-x-1/2 -translate-y-1/2 rounded-full border border-pink-300/[0.07]" />
+
+      {/* Identidad del personaje. Se oculta en espacios pequeños. */}
+      <div className="pointer-events-none absolute left-5 top-5 hidden items-center gap-3 rounded-2xl border border-white/10 bg-black/15 px-3.5 py-2.5 shadow-xl shadow-black/10 backdrop-blur-md sm:flex">
+        <span className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-pink-400/25 to-cyan-400/20 ring-1 ring-white/10">
+          <span className="h-2.5 w-2.5 rounded-full bg-emerald-300 shadow-[0_0_14px_rgba(110,231,183,0.9)]" />
+          <span className="absolute inset-0 animate-ping rounded-xl border border-pink-300/15" />
+        </span>
+        <span className="flex flex-col">
+          <span className="text-[11px] font-semibold tracking-[0.18em] text-white/90">
+            AIKO
+          </span>
+          <span className="text-[10px] text-white/45">Compañera personal · en línea</span>
+        </span>
+      </div>
+
       {/* Cinematic backlight — intensity scales with affection */}
       <div
-        className="pointer-events-none absolute left-1/2 top-1/2 h-[480px] w-[480px] -translate-x-1/2 -translate-y-[55%] rounded-full blur-3xl transition-opacity duration-700"
+        className="pointer-events-none absolute left-1/2 top-1/2 aspect-square w-[min(62vh,42rem)] -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl transition-opacity duration-700"
         style={{
           opacity: glow,
           background:
@@ -112,7 +131,7 @@ export function AikoAvatar({ onClick, reactionOverride }: AikoAvatarProps) {
         }}
       />
       <div
-        className="pointer-events-none absolute left-1/2 top-1/2 h-[300px] w-[300px] -translate-x-1/2 translate-y-[10%] rounded-full blur-3xl transition-opacity duration-700"
+        className="pointer-events-none absolute left-1/2 top-[58%] aspect-square w-[min(42vh,28rem)] -translate-x-1/2 rounded-full blur-3xl transition-opacity duration-700"
         style={{
           opacity: glow * 0.85,
           background:
@@ -151,13 +170,13 @@ export function AikoAvatar({ onClick, reactionOverride }: AikoAvatarProps) {
       ))}
 
       {/* Ambient sparkles */}
-      {[0, 1, 2, 3, 4].map((i) => (
+      {[0, 1, 2, 3, 4, 5, 6].map((i) => (
         <span
           key={i}
           className="pointer-events-none absolute h-1.5 w-1.5 rounded-full"
           style={{
-            left: `${15 + i * 17}%`,
-            top: `${12 + (i % 2) * 60}%`,
+            left: `${12 + i * 12.5}%`,
+            top: `${14 + ((i * 37) % 65)}%`,
             background: "oklch(0.9 0.09 355)",
             animation: `aiko-sparkle ${2 + i * 0.35}s ease-in-out infinite`,
             animationDelay: `${i * 0.28}s`,
@@ -170,7 +189,7 @@ export function AikoAvatar({ onClick, reactionOverride }: AikoAvatarProps) {
         type="button"
         onClick={handleClick}
         aria-label="Interactuar con Aiko"
-        className="relative h-[560px] w-[400px] cursor-pointer outline-none"
+        className="relative z-10 aspect-[5/7] w-[min(78vw,34rem)] max-w-[78%] cursor-pointer rounded-[40%] outline-none transition-transform duration-300 hover:scale-[1.025] focus-visible:ring-2 focus-visible:ring-pink-300/60 focus-visible:ring-offset-4 focus-visible:ring-offset-transparent active:scale-[0.99]"
         style={{ animation: "aiko-breathe 5s ease-in-out infinite" }}
       >
         <svg
@@ -415,10 +434,18 @@ export function AikoAvatar({ onClick, reactionOverride }: AikoAvatarProps) {
 
         {/* Ground shadow */}
         <div
-          className="pointer-events-none absolute bottom-2 left-1/2 h-4 w-56 -translate-x-1/2 rounded-full opacity-45 blur-md"
+          className="pointer-events-none absolute bottom-2 left-1/2 h-5 w-[65%] -translate-x-1/2 rounded-full opacity-50 blur-md"
           style={{ background: "black" }}
         />
       </button>
+
+      {/* Plataforma luminosa para evitar que el personaje parezca flotando. */}
+      <div className="pointer-events-none absolute bottom-[6%] left-1/2 z-0 h-10 w-[min(46vw,31rem)] -translate-x-1/2 rounded-[50%] border border-cyan-200/10 bg-cyan-300/[0.035] shadow-[0_0_55px_rgba(34,211,238,0.14)] blur-[0.2px] sm:bottom-[10%] lg:bottom-[16%]" />
+      <div className="pointer-events-none absolute bottom-[6.8%] left-1/2 z-0 h-3 w-[min(35vw,23rem)] -translate-x-1/2 rounded-[50%] bg-pink-300/10 blur-md sm:bottom-[10.8%] lg:bottom-[16.8%]" />
+
+      <div className="pointer-events-none absolute bottom-5 right-5 hidden rounded-full border border-white/10 bg-black/15 px-3 py-1.5 text-[9px] uppercase tracking-[0.16em] text-white/40 backdrop-blur-md md:block">
+        Toca a Aiko para interactuar
+      </div>
     </div>
   );
 }
