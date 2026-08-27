@@ -1,6 +1,7 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import type { MutableRefObject, PointerEvent as ReactPointerEvent } from "react";
 import { Canvas, useFrame, useLoader, useThree } from "@react-three/fiber";
+import type { ThreeEvent } from "@react-three/fiber";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { VRMLoaderPlugin, type VRM } from "@pixiv/three-vrm";
 import type { Group, Object3D } from "three";
@@ -18,6 +19,7 @@ interface AikoModelProps {
   reaction: Reaction;
   onReady: () => void;
   dragRotation: MutableRefObject<{ x: number; y: number }>;
+  onBodyHit: (part: "head" | "body" | "chest" | "butt") => void;
 }
 
 const MODEL_URL = "/models/aiko_proti.vrm";
@@ -25,14 +27,14 @@ const MODEL_URL = "/models/aiko_proti.vrm";
 function CameraRig() {
   const { camera, size } = useThree();
   useEffect(() => {
-    camera.position.set(0, size.width < 600 ? 1.12 : 1.18, size.width < 600 ? 2.75 : 2.35);
-    camera.lookAt(0, 1.02, 0);
+    camera.position.set(0, size.width < 600 ? 1.05 : 1.08, size.width < 600 ? 3.05 : 2.62);
+    camera.lookAt(0, 0.9, 0);
     camera.updateProjectionMatrix();
   }, [camera, size.width]);
   return null;
 }
 
-function AikoModel({ reaction, onReady, dragRotation }: AikoModelProps) {
+function AikoModel({ reaction, onReady, dragRotation, onBodyHit }: AikoModelProps) {
   const modelRoot = useRef<Group>(null);
   const elapsed = useRef(0);
   const gltf = useLoader(GLTFLoader, MODEL_URL, (loader) => {
@@ -68,7 +70,7 @@ function AikoModel({ reaction, onReady, dragRotation }: AikoModelProps) {
     const t = elapsed.current;
 
     if (modelRoot.current) {
-      modelRoot.current.position.y = -0.53 + Math.sin(t * 1.25) * 0.008;
+      modelRoot.current.position.y = -0.34 + Math.sin(t * 1.25) * 0.008;
       modelRoot.current.rotation.x += (dragRotation.current.x - modelRoot.current.rotation.x) * 0.1;
       modelRoot.current.rotation.y += (dragRotation.current.y - modelRoot.current.rotation.y) * 0.1;
       modelRoot.current.rotation.z = Math.sin(t * 0.42) * 0.008;
@@ -100,9 +102,31 @@ function AikoModel({ reaction, onReady, dragRotation }: AikoModelProps) {
     vrm.update(delta);
   });
 
+  function identifyBodyPart(event: ThreeEvent<PointerEvent>) {
+    event.stopPropagation();
+    const point = event.point;
+    const head = vrm.humanoid?.getNormalizedBoneNode("head");
+    const chest = vrm.humanoid?.getNormalizedBoneNode("upperChest");
+    const hips = vrm.humanoid?.getNormalizedBoneNode("hips");
+    const headPosition = head?.getWorldPosition(point.clone());
+    const chestPosition = chest?.getWorldPosition(point.clone());
+    const hipsPosition = hips?.getWorldPosition(point.clone());
+    const facingBack = Math.cos(dragRotation.current.y) < -0.25;
+
+    if (headPosition && event.point.distanceTo(headPosition) < 0.34) {
+      onBodyHit("head");
+    } else if (hipsPosition && event.point.distanceTo(hipsPosition) < 0.4 && facingBack) {
+      onBodyHit("butt");
+    } else if (chestPosition && event.point.distanceTo(chestPosition) < 0.38 && !facingBack) {
+      onBodyHit("chest");
+    } else {
+      onBodyHit("body");
+    }
+  }
+
   return (
-    <group ref={modelRoot} position={[0, -0.53, 0]}>
-      <primitive object={vrm.scene} />
+    <group ref={modelRoot} position={[0, -0.34, 0]}>
+      <primitive object={vrm.scene} onPointerDown={identifyBodyPart} />
     </group>
   );
 }
@@ -116,6 +140,7 @@ export function AikoAvatar({ onClick, onAffectionChange, reactionOverride }: Aik
   const thoughtTimer = useRef<number | null>(null);
   const dragRotation = useRef({ x: 0, y: 0 });
   const drag = useRef({ active: false, moved: false, x: 0, y: 0 });
+  const bodyHit = useRef<"head" | "body" | "chest" | "butt" | null>(null);
   const affection = useAffection();
   const effective = reactionOverride ?? reaction;
 
@@ -178,17 +203,9 @@ export function AikoAvatar({ onClick, onAffectionChange, reactionOverride }: Aik
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
     if (wasClick) {
-      const bounds = event.currentTarget.getBoundingClientRect();
-      const relativeX = (event.clientX - bounds.left) / bounds.width;
-      const relativeY = (event.clientY - bounds.top) / bounds.height;
-      const centered = relativeX >= 0.36 && relativeX <= 0.64;
-      const facingBack = Math.cos(dragRotation.current.y) < -0.25;
-      let bodyPart: "head" | "body" | "chest" | "butt" = "body";
-      if (centered && relativeY >= 0.25 && relativeY < 0.45) bodyPart = "head";
-      else if (centered && facingBack && relativeY >= 0.57 && relativeY < 0.78) bodyPart = "butt";
-      else if (centered && !facingBack && relativeY >= 0.45 && relativeY < 0.67) bodyPart = "chest";
-      handleClick(bodyPart);
+      if (bodyHit.current) handleClick(bodyHit.current);
     }
+    bodyHit.current = null;
   }
 
   const glowOpacity = Math.min(0.72, 0.34 + affection.level * 0.035);
@@ -196,9 +213,9 @@ export function AikoAvatar({ onClick, onAffectionChange, reactionOverride }: Aik
   return (
     <div className="relative isolate flex h-full min-h-[32rem] w-full items-center justify-center overflow-hidden select-none">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_42%,rgba(255,91,164,0.14),transparent_31%),radial-gradient(circle_at_50%_76%,rgba(34,211,238,0.11),transparent_34%)]" />
-      <div className="pointer-events-none absolute left-1/2 top-1/2 aspect-square w-[min(72vh,46rem)] -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/[0.055]" />
-      <div className="pointer-events-none absolute left-1/2 top-1/2 aspect-square w-[min(56vh,35rem)] -translate-x-1/2 -translate-y-1/2 rounded-full border border-pink-300/[0.08]" />
-      <div className="pointer-events-none absolute left-5 top-5 z-20 hidden items-center gap-3 rounded-2xl border border-white/10 bg-black/20 px-3.5 py-2.5 shadow-xl backdrop-blur-md sm:flex">
+      <div className="pointer-events-none absolute left-1/2 top-[54%] aspect-square w-[min(68vh,43rem)] -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/[0.055]" />
+      <div className="pointer-events-none absolute left-1/2 top-[54%] aspect-square w-[min(52vh,33rem)] -translate-x-1/2 -translate-y-1/2 rounded-full border border-pink-300/[0.08]" />
+      <div className="pointer-events-none absolute left-1/2 top-5 z-20 hidden -translate-x-1/2 items-center gap-3 rounded-full border border-white/10 bg-slate-950/35 px-4 py-2 shadow-xl backdrop-blur-md sm:flex">
         <span className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-pink-400/25 to-cyan-400/20 ring-1 ring-white/10">
           <span className={ready ? "h-2.5 w-2.5 rounded-full bg-emerald-300 shadow-[0_0_14px_rgba(110,231,183,.9)]" : "h-2.5 w-2.5 animate-pulse rounded-full bg-amber-300"} />
         </span>
@@ -212,6 +229,7 @@ export function AikoAvatar({ onClick, onAffectionChange, reactionOverride }: Aik
         role="button"
         tabIndex={0}
         aria-label="Haz clic para alegrar a Aiko o arrastra para girarla"
+        onPointerDownCapture={() => { bodyHit.current = null; }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
@@ -226,7 +244,7 @@ export function AikoAvatar({ onClick, onAffectionChange, reactionOverride }: Aik
       >
         <Canvas
           dpr={[1, 1.5]}
-          camera={{ fov: 27, near: 0.1, far: 20, position: [0, 1.18, 2.35] }}
+          camera={{ fov: 28, near: 0.1, far: 20, position: [0, 1.08, 2.62] }}
           gl={{ alpha: true, antialias: true, powerPreference: "high-performance" }}
           onCreated={({ gl }) => gl.setClearColor(0x000000, 0)}
         >
@@ -236,7 +254,12 @@ export function AikoAvatar({ onClick, onAffectionChange, reactionOverride }: Aik
           <directionalLight position={[-2, 2, 1]} intensity={1.15} color="#8be7ff" />
           <pointLight position={[0, 0.8, 2]} intensity={0.75} color="#ffffff" />
           <Suspense fallback={null}>
-            <AikoModel reaction={effective} onReady={() => setReady(true)} dragRotation={dragRotation} />
+            <AikoModel
+              reaction={effective}
+              onReady={() => setReady(true)}
+              dragRotation={dragRotation}
+              onBodyHit={(part) => { bodyHit.current = part; }}
+            />
           </Suspense>
         </Canvas>
       </div>
@@ -253,7 +276,7 @@ export function AikoAvatar({ onClick, onAffectionChange, reactionOverride }: Aik
       ))}
 
       {thought && (
-        <div className="pointer-events-none absolute left-1/2 top-[12%] z-40 w-[min(88%,22rem)] -translate-x-1/2 animate-in fade-in zoom-in-95 duration-200 sm:left-[66%] sm:top-[18%] sm:w-auto sm:max-w-[18rem] sm:translate-x-0">
+        <div className="pointer-events-none absolute left-1/2 top-[13%] z-40 w-[min(88%,22rem)] -translate-x-1/2 animate-in fade-in zoom-in-95 duration-200 sm:left-[calc(50%+7.5rem)] sm:top-[29%] sm:w-auto sm:max-w-[18rem] sm:translate-x-0">
           <div className="relative rounded-2xl border border-pink-200/30 bg-slate-950/90 px-4 py-3 text-center text-sm font-semibold leading-snug text-pink-50 shadow-[0_14px_45px_rgba(0,0,0,.5),0_0_28px_rgba(244,114,182,.22)] backdrop-blur-xl sm:text-left">
             {thought}
             <span className="absolute -bottom-2 left-1/2 h-4 w-4 -translate-x-1/2 rotate-45 border-b border-r border-pink-200/30 bg-slate-950/90 sm:left-5 sm:translate-x-0" />
@@ -262,7 +285,6 @@ export function AikoAvatar({ onClick, onAffectionChange, reactionOverride }: Aik
       )}
 
       <div className="pointer-events-none absolute bottom-[7%] left-1/2 z-0 h-10 w-[min(42vw,30rem)] -translate-x-1/2 rounded-[50%] border border-cyan-200/10 bg-cyan-300/[0.04] shadow-[0_0_55px_rgba(34,211,238,.15)] sm:bottom-[10%]" />
-      <div className="pointer-events-none absolute bottom-5 right-5 z-20 hidden rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-[9px] uppercase tracking-[0.16em] text-white/40 backdrop-blur-md md:block">Clic: alegrar · Arrastrar: girar</div>
     </div>
   );
 }
