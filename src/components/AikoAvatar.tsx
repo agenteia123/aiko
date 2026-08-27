@@ -27,16 +27,31 @@ const MODEL_URL = "/models/aiko_proti.vrm";
 function CameraRig() {
   const { camera, size } = useThree();
   useEffect(() => {
-    camera.position.set(0, size.width < 600 ? 1.05 : 1.08, size.width < 600 ? 3.15 : 2.78);
+    const compact = size.width < 600;
+    const shortViewport = size.height < 650;
+    camera.position.set(
+      0,
+      compact ? 1.04 : 1.08,
+      (compact ? 3.15 : 2.78) + (shortViewport ? 0.28 : 0),
+    );
     camera.lookAt(0, 0.9, 0);
     camera.updateProjectionMatrix();
-  }, [camera, size.width]);
+  }, [camera, size.height, size.width]);
   return null;
 }
 
 function AikoModel({ reaction, onReady, dragRotation, onBodyHit }: AikoModelProps) {
   const modelRoot = useRef<Group>(null);
   const elapsed = useRef(0);
+  const blinkStartedAt = useRef<number | null>(null);
+  const nextBlinkAt = useRef(2.8);
+  const idleGaze = useRef({ x: 0, y: 0, nextAt: 1.8 });
+  const expressionValues = useRef({
+    happy: 0,
+    angry: 0,
+    relaxed: 0,
+    surprised: 0,
+  });
   const gltf = useLoader(GLTFLoader, MODEL_URL, (loader) => {
     loader.register((parser) => new VRMLoaderPlugin(parser));
   });
@@ -68,6 +83,12 @@ function AikoModel({ reaction, onReady, dragRotation, onBodyHit }: AikoModelProp
     if (!vrm) return;
     elapsed.current += delta;
     const t = elapsed.current;
+
+    if (t >= idleGaze.current.nextAt) {
+      idleGaze.current.x = (Math.random() - 0.5) * 0.13;
+      idleGaze.current.y = (Math.random() - 0.5) * 0.07;
+      idleGaze.current.nextAt = t + 2.2 + Math.random() * 3.2;
+    }
 
     if (modelRoot.current) {
       const happyBounce = reaction === "hearts" ? Math.abs(Math.sin(t * 4.5)) * 0.009 : 0;
@@ -134,10 +155,12 @@ function AikoModel({ reaction, onReady, dragRotation, onBodyHit }: AikoModelProp
       );
     }
     if (head) {
-      head.rotation.y += (state.pointer.x * 0.3 - head.rotation.y) * 0.08;
+      const targetLookY = state.pointer.x * 0.24 + idleGaze.current.x;
+      const targetLookX = -state.pointer.y * 0.13 + idleGaze.current.y;
+      head.rotation.y += (targetLookY - head.rotation.y) * 0.055;
       const reactionHeadX = reaction === "blush" ? 0.12 : reaction === "angry" ? 0.045 : 0;
       head.rotation.x +=
-        (reactionHeadX - state.pointer.y * 0.16 - head.rotation.x) * 0.08;
+        (reactionHeadX + targetLookX - head.rotation.x) * 0.055;
       const reactionHeadZ = reaction === "blush" ? 0.075 : 0;
       head.rotation.z +=
         (reactionHeadZ - state.pointer.x * 0.06 - head.rotation.z) * 0.06;
@@ -149,15 +172,39 @@ function AikoModel({ reaction, onReady, dragRotation, onBodyHit }: AikoModelProp
         Math.sin(t * 1.25) * 0.008 + (reaction === "hearts" ? Math.sin(t * 5) * 0.012 : 0);
     }
 
-    const blinkCycle = t % 5.4;
-    const blink = blinkCycle > 5.08 ? Math.sin(((blinkCycle - 5.08) / 0.32) * Math.PI) : 0;
+    if (blinkStartedAt.current === null && t >= nextBlinkAt.current) {
+      blinkStartedAt.current = t;
+    }
+    let blink = 0;
+    if (blinkStartedAt.current !== null) {
+      const blinkPhase = (t - blinkStartedAt.current) / 0.18;
+      if (blinkPhase >= 1) {
+        blinkStartedAt.current = null;
+        nextBlinkAt.current = t + 2.5 + Math.random() * 3.8;
+      } else {
+        blink = Math.sin(blinkPhase * Math.PI);
+      }
+    }
     const expressions = vrm.expressionManager;
     if (expressions) {
+      const targets = {
+        happy: reaction === "hearts" ? 0.78 : reaction === "blush" ? 0.24 : 0.06,
+        angry: reaction === "angry" ? 0.68 : 0,
+        relaxed: reaction === "idle" ? 0.14 : 0,
+        surprised: reaction === "hearts" ? 0.05 : 0,
+      };
+      expressionValues.current.happy = move(expressionValues.current.happy, targets.happy);
+      expressionValues.current.angry = move(expressionValues.current.angry, targets.angry);
+      expressionValues.current.relaxed = move(expressionValues.current.relaxed, targets.relaxed);
+      expressionValues.current.surprised = move(
+        expressionValues.current.surprised,
+        targets.surprised,
+      );
       expressions.setValue("blink", blink);
-      expressions.setValue("happy", reaction === "hearts" ? 0.82 : reaction === "blush" ? 0.28 : 0.08);
-      expressions.setValue("angry", reaction === "angry" ? 0.72 : 0);
-      expressions.setValue("relaxed", reaction === "idle" ? 0.12 : 0);
-      expressions.setValue("surprised", reaction === "hearts" ? 0.08 : 0);
+      expressions.setValue("happy", expressionValues.current.happy);
+      expressions.setValue("angry", expressionValues.current.angry);
+      expressions.setValue("relaxed", expressionValues.current.relaxed);
+      expressions.setValue("surprised", expressionValues.current.surprised);
     }
 
     vrm.lookAt?.lookAt(state.camera.position);
