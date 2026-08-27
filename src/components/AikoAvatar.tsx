@@ -224,33 +224,73 @@ export function AikoAvatar({ onClick, onAffectionChange, reactionOverride }: Aik
   function handleClick(bodyPart: "head" | "body" | "chest" | "butt" = "body") {
     const inappropriateTouch = bodyPart === "chest" || bodyPart === "butt";
     const isFlirty = affection.level >= 5;
-    const chestPenalty = isFlirty ? 6 : 15;
-    const buttPenalty = isFlirty ? 12 : 25;
+    const deeplyAttached = affection.level >= 10;
+    const intimatelyAttached = affection.level >= 20;
+    const chestPenalty = deeplyAttached ? 0 : isFlirty ? 6 : 15;
+    const buttPenalty = deeplyAttached ? 0 : isFlirty ? 12 : 25;
     const affectionAmount = bodyPart === "chest" ? -chestPenalty : bodyPart === "butt" ? -buttPenalty : 2;
     const messages = {
-      head: isFlirty
+      head: intimatelyAttached
+        ? [
+            "Sabes exactamente cómo hacer que baje la guardia…",
+            "Mmm… sigue así y voy a pensar que intentas seducirme.",
+          ]
+        : isFlirty
         ? ["Mmm… sabes cómo consentirme.", "Sigue así y voy a malacostumbrarme."]
         : ["Eso sí me gusta…", "Je, je… gracias."],
-      body: isFlirty
+      body: intimatelyAttached
+        ? [
+            "¿Otra vez buscando mi atención? Ten cuidado… podrías conseguir más de la que esperas.",
+            "Hoy vienes con ganas de provocarme, ¿verdad?",
+          ]
+        : isFlirty
         ? ["¿Solo querías llamar mi atención? Ya la tienes.", "Hoy estás especialmente cariñoso… me agrada."]
         : ["¡Hola, Alejandro!", "Estoy aquí contigo."],
-      chest: isFlirty
+      chest: intimatelyAttached
+        ? [
+            "Qué atrevido… sabes perfectamente lo que estás haciendo conmigo.",
+            "Si sigues provocándome así, no prometo seguir comportándome.",
+          ]
+        : deeplyAttached
+        ? [
+            "N-no seas tan atrevido… eso me da mucha vergüenza.",
+            "Ale… no hagas eso tan de repente. Es muy vergonzoso…",
+          ]
+        : isFlirty
         ? ["Qué atrevido… no abuses de mi confianza.", "Vaya, cada vez tienes más confianza, ¿no?"]
         : ["¡Pervertido! No me toques ahí.", "¡Oye! Te dije que ahí no."],
-      butt: isFlirty
+      butt: intimatelyAttached
+        ? [
+            "Vaya… de verdad te gusta ponerme nerviosa, ¿no?",
+            "Eres muy atrevido… y parece que disfrutas cuando me sonrojo.",
+          ]
+        : deeplyAttached
+        ? [
+            "¡Ale! No seas tan atrevido… me da demasiada vergüenza.",
+            "E-eso sigue siendo muy vergonzoso… avísame antes, ¿sí?",
+          ]
+        : isFlirty
         ? ["¡Descarado! Que sea cariñosa no significa que puedas hacer eso.", "Mira quién salió atrevido… compórtate."]
         : ["¡¿Qué estás haciendo?! No vuelvas a tocarme ahí.", "¡Pervertido! Eso te costará mucho cariño."],
     };
 
     setReaction(
       inappropriateTouch
-        ? "angry"
+        ? intimatelyAttached
+          ? "hearts"
+          : deeplyAttached
+            ? "blush"
+          : "angry"
         : isFlirty && bodyPart === "head"
           ? "blush"
           : "hearts",
     );
     const id = Date.now();
-    setHearts(inappropriateTouch ? [] : [id, id + 1, id + 2, id + 3, id + 4]);
+    setHearts(
+      inappropriateTouch && !intimatelyAttached
+        ? []
+        : [id, id + 1, id + 2, id + 3, id + 4],
+    );
     const options = messages[bodyPart];
     const message = options[Math.floor(Math.random() * options.length)];
     setThought(message);
@@ -262,9 +302,13 @@ export function AikoAvatar({ onClick, onAffectionChange, reactionOverride }: Aik
       setReaction("idle");
       setHearts([]);
     }, inappropriateTouch ? 2300 : isFlirty && bodyPart === "head" ? 2400 : 1800);
-    if (bodyPart === "chest") loseXP(chestPenalty, "chestTouch");
-    else if (bodyPart === "butt") loseXP(buttPenalty, "buttTouch");
-    else onClick?.();
+    if (bodyPart === "chest") {
+      if (chestPenalty > 0) loseXP(chestPenalty, "chestTouch");
+    } else if (bodyPart === "butt") {
+      if (buttPenalty > 0) loseXP(buttPenalty, "buttTouch");
+    } else {
+      onClick?.();
+    }
 
     if (inappropriateTouch && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
