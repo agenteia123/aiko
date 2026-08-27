@@ -25,6 +25,7 @@ import {
   FileText,
   Copy,
   Check,
+  Clock3,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -110,18 +111,21 @@ function makeTitle(text: string): string {
   return t;
 }
 
-function formatWhen(ts?: number): string {
-  if (!ts) return "";
-  try {
-    return new Date(ts).toLocaleString("es-PE", {
-      day: "2-digit",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return "";
-  }
+function formatHistoryDate(ts?: number): string {
+  if (!ts) return "Sin fecha";
+  return new Date(ts).toLocaleDateString("es-PE", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function formatHistoryTime(ts?: number): string {
+  if (!ts) return "--:--";
+  return new Date(ts).toLocaleTimeString("es-PE", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function looksLikeReminderRefusal(text: string): boolean {
@@ -264,7 +268,18 @@ export function ChatPanel({
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const sendTextRef = useRef<(text: string) => void>(() => {});
+  const sendTextRef = useRef<
+    (text: string, options?: { replaceMessageId?: string }) => void
+  >(() => {});
+  const requestControllerRef = useRef<AbortController | null>(null);
+  const requestSerialRef = useRef(0);
+
+  useEffect(
+    () => () => {
+      requestControllerRef.current?.abort();
+    },
+    [],
+  );
 
   const stt = useSpeechRecognition({
     lang: LANG_MAP[language] ?? "es-ES",
@@ -454,17 +469,30 @@ export function ChatPanel({
   );
 
   const sendText = useCallback(
-    async (rawText: string) => {
+    async (
+      rawText: string,
+      options?: { replaceMessageId?: string },
+    ) => {
       const text = rawText.trim();
       if (!text || !active) return;
-      if (typing || uploading) return;
+      const replaceMessageId = options?.replaceMessageId;
+      if ((typing && !replaceMessageId) || uploading) return;
+
+      if (replaceMessageId) {
+        requestControllerRef.current?.abort();
+      }
 
       setError(null);
 
-      const currentAttachments = [...attachments];
+      const originalMessage = replaceMessageId
+        ? active.messages.find((m) => m.id === replaceMessageId)
+        : undefined;
+      const currentAttachments = replaceMessageId
+        ? [...(originalMessage?.attachments || [])]
+        : [...attachments];
 
       const userMsg: ChatMessage = {
-        id: crypto.randomUUID(),
+        id: replaceMessageId || crypto.randomUUID(),
         role: "user",
         text,
         at: Date.now(),
@@ -472,11 +500,16 @@ export function ChatPanel({
       };
 
       updateActive((c) => {
+        const replaceIndex = replaceMessageId
+          ? c.messages.findIndex((m) => m.id === replaceMessageId)
+          : -1;
+        const baseMessages =
+          replaceIndex >= 0 ? c.messages.slice(0, replaceIndex) : c.messages;
         const isFirstUser =
-          c.messages.filter((m) => m.role === "user").length === 0;
+          baseMessages.filter((m) => m.role === "user").length === 0;
         return {
           ...c,
-          messages: [...c.messages, userMsg],
+          messages: [...baseMessages, userMsg],
           title:
             isFirstUser || !c.title || c.title === "Nueva conversación"
               ? makeTitle(text)
@@ -487,6 +520,10 @@ export function ChatPanel({
       setInput("");
       setAttachments([]);
       setTyping(true);
+
+      const requestSerial = ++requestSerialRef.current;
+      const controller = new AbortController();
+      requestControllerRef.current = controller;
 
       try {
         const response = await fetch(`${API_BASE_URL}/api/chat/message`, {
@@ -500,6 +537,7 @@ export function ChatPanel({
             conversation_id: active.id,
             user_id: "user-123",
             analysis_level: analysisLevel,
+            replace_message_id: replaceMessageId || undefined,
             attachments: currentAttachments.length
               ? currentAttachments.map((a) => ({
                   name: a.name,
@@ -508,6 +546,7 @@ export function ChatPanel({
                 }))
               : undefined,
           }),
+          signal: controller.signal,
         });
 
         if (!response.ok) {
@@ -517,6 +556,7 @@ export function ChatPanel({
         }
 
         const data: BackendChatResponse = await response.json();
+        if (requestSerial !== requestSerialRef.current) return;
         if (!data.success) throw new Error(data.error || "Backend error");
 
         const rem = data.metadata?.reminder;
@@ -545,6 +585,13 @@ export function ChatPanel({
 
         if (onAikoSpeak && reply.text) onAikoSpeak(reply.text);
       } catch (err) {
+        if (
+          controller.signal.aborted ||
+          requestSerial !== requestSerialRef.current ||
+          (err instanceof DOMException && err.name === "AbortError")
+        ) {
+          return;
+        }
         const errorMsg =
           err instanceof Error
             ? err.message
@@ -563,7 +610,10 @@ export function ChatPanel({
           ],
         }));
       } finally {
-        setTyping(false);
+        if (requestSerial === requestSerialRef.current) {
+          requestControllerRef.current = null;
+          setTyping(false);
+        }
       }
     },
     [
@@ -581,6 +631,10 @@ export function ChatPanel({
   useEffect(() => {
     sendTextRef.current = sendText;
   }, [sendText]);
+
+  const editAndResend = useCallback((messageId: string, newText: string) => {
+    sendTextRef.current(newText, { replaceMessageId: messageId });
+  }, []);
 
   function send() {
     if (input.trim() && !uploading && !typing) sendText(input);
@@ -781,7 +835,11 @@ export function ChatPanel({
                   <div className="h-px flex-1 bg-white/8" />
                 </div>
               ) : (
-                <MessageBubble key={item.msg!.id} msg={item.msg!} />
+                <MessageBubble
+                  key={item.msg!.id}
+                  msg={item.msg!}
+                  onEdit={item.msg!.role === "user" ? editAndResend : undefined}
+                />
               ),
             )
           )}
@@ -955,10 +1013,29 @@ export function ChatPanel({
   );
 }
 
-function MessageBubble({ msg }: { msg: ChatMessage }) {
+function MessageBubble({
+  msg,
+  onEdit,
+}: {
+  msg: ChatMessage;
+  onEdit?: (messageId: string, newText: string) => void;
+}) {
   const isUser = msg.role === "user";
   const [copied, setCopied] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState(msg.text);
   const docs = !isUser ? extractDocLinks(msg.text) : [];
+
+  const saveEdit = () => {
+    const next = editText.trim();
+    if (!next || next === msg.text) {
+      setEditing(false);
+      setEditText(msg.text);
+      return;
+    }
+    setEditing(false);
+    onEdit?.(msg.id, next);
+  };
 
   const copyMessage = async () => {
     try {
@@ -1005,7 +1082,67 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
         )}
       >
         {isUser ? (
-          <p className="whitespace-pre-wrap break-words">{msg.text}</p>
+          editing ? (
+            <div className="space-y-2">
+              <textarea
+                autoFocus
+                value={editText}
+                onChange={(event) => setEditText(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    saveEdit();
+                  }
+                  if (event.key === "Escape") {
+                    setEditing(false);
+                    setEditText(msg.text);
+                  }
+                }}
+                rows={Math.min(6, Math.max(2, editText.split("\n").length))}
+                className="min-h-[4.5rem] w-[min(72vw,34rem)] resize-y rounded-xl border border-white/25 bg-black/20 px-3 py-2 text-sm text-white outline-none placeholder:text-white/50 focus:border-white/50"
+              />
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditing(false);
+                    setEditText(msg.text);
+                  }}
+                  className="rounded-lg px-2.5 py-1 text-[11px] font-medium text-white/75 transition hover:bg-white/10 hover:text-white"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={saveEdit}
+                  disabled={!editText.trim()}
+                  className="flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1 text-[11px] font-semibold text-pink-600 transition hover:bg-pink-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Send className="h-3 w-3" /> Guardar y enviar
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="group/user">
+              <p className="whitespace-pre-wrap break-words">{msg.text}</p>
+              <div className="mt-1.5 flex items-center justify-end gap-2 text-[10px] text-white/65">
+                <span>{formatHistoryTime(msg.at)}</span>
+                {onEdit && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditText(msg.text);
+                      setEditing(true);
+                    }}
+                    className="flex items-center gap-1 rounded-md px-1.5 py-0.5 font-medium text-white/75 opacity-70 transition hover:bg-white/15 hover:text-white group-hover/user:opacity-100"
+                    title="Editar este mensaje y generar otra respuesta"
+                  >
+                    <Pencil className="h-3 w-3" /> Editar
+                  </button>
+                )}
+              </div>
+            </div>
+          )
         ) : (
           <>
             <div className="flex items-center justify-end border-b border-white/[0.07] pb-2">
@@ -1332,8 +1469,13 @@ function ConversationRow({
             <div className="truncate text-xs font-medium text-foreground">
               {conv.title || "Sin título"}
             </div>
-            <div className="truncate text-[10px] text-muted-foreground">
-              {formatWhen(conv.updatedAt)}
+            <div className="mt-1 flex items-center gap-1.5 text-[10px] text-muted-foreground">
+              <span>{formatHistoryDate(conv.updatedAt)}</span>
+              <span className="text-white/15">•</span>
+              <span className="inline-flex items-center gap-1 font-medium text-foreground/65">
+                <Clock3 className="h-2.5 w-2.5" />
+                {formatHistoryTime(conv.updatedAt)}
+              </span>
             </div>
           </div>
           <div className="flex shrink-0 gap-0.5 opacity-0 transition group-hover:opacity-100">
