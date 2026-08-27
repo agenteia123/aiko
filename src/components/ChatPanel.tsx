@@ -69,6 +69,14 @@ interface BackendChatResponse {
   timestamp?: number;
   tool_calls?: unknown[];
   error?: string;
+  metadata?: {
+    intent?: string;
+    reminder?: {
+      text: string;
+      minutes?: number;
+      at: string;
+    };
+  };
 }
 
 interface AttachmentItem {
@@ -115,6 +123,28 @@ function formatWhen(ts?: number): string {
   } catch {
     return "";
   }
+}
+
+function looksLikeReminderRefusal(text: string): boolean {
+  const t = (text || "").toLowerCase();
+  return (
+    t.includes("no puedo crear recordatorio") ||
+    t.includes("no puedo crear recordatorios") ||
+    t.includes("no puedo programar") ||
+    t.includes("aplicación de recordatorios") ||
+    t.includes("asistente de voz") ||
+    t.includes("no puedo crear recordatorios directamente")
+  );
+}
+
+function formatReminderWhen(at: number | string): string {
+  const d = new Date(at);
+  return d.toLocaleString("es-PE", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function dayLabel(ts: number): string {
@@ -414,6 +444,47 @@ export function ChatPanel({
     return true;
   }, []);
 
+  const applyReminder = useCallback(
+    (payload: { text: string; at: number | string }) => {
+      const atMs =
+        typeof payload.at === "string"
+          ? new Date(payload.at).getTime()
+          : payload.at;
+      if (!payload.text || !Number.isFinite(atMs)) return false;
+
+      const items = store.loadReminders();
+      const already = items.some(
+        (r) =>
+          r.text === payload.text && Math.abs((r.at || 0) - atMs) < 15_000,
+      );
+      if (!already) {
+        store.saveReminders([
+          {
+            id: crypto.randomUUID(),
+            text: payload.text,
+            at: atMs,
+            repeat: "none",
+            fired: false,
+          },
+          ...items,
+        ]);
+      }
+
+      if (!already) {
+        try {
+          toast.success("Recordatorio creado", {
+            description: `${payload.text} · ${formatReminderWhen(atMs)}`,
+            duration: 4000,
+          });
+        } catch {
+          /* ignore */
+        }
+      }
+      return true;
+    },
+    [],
+  );
+
   const sendText = useCallback(
     async (rawText: string) => {
       const text = rawText.trim();
@@ -481,10 +552,37 @@ export function ChatPanel({
         const data: BackendChatResponse = await response.json();
         if (!data.success) throw new Error(data.error || "Backend error");
 
+        const localIntent = parseReminderIntent(text);
+        const backendReminder = data.metadata?.reminder;
+
+        let replyText =
+          data.response || "No pude procesar tu mensaje correctamente.";
+
+        if (backendReminder?.at) {
+          applyReminder({
+            text: backendReminder.text || localIntent?.text || "Recordatorio",
+            at: backendReminder.at,
+          });
+        } else if (localIntent) {
+          applyReminder({ text: localIntent.text, at: localIntent.at });
+        }
+
+        if (
+          (backendReminder || localIntent) &&
+          looksLikeReminderRefusal(replyText)
+        ) {
+          const src = backendReminder || {
+            text: localIntent!.text,
+            at: new Date(localIntent!.at).toISOString(),
+            minutes: undefined,
+          };
+          replyText = `Listo, Ale. Quedó el recordatorio: ${src.text} · ${formatReminderWhen(src.at)} ⏰`;
+        }
+
         const reply: ChatMessage = {
           id: data.message_id || crypto.randomUUID(),
           role: "aiko",
-          text: data.response || "No pude procesar tu mensaje correctamente.",
+          text: replyText,
           at: data.timestamp || Date.now(),
           tool: data.tool_calls ? { calls: data.tool_calls } : undefined,
         };
@@ -526,6 +624,7 @@ export function ChatPanel({
       typing,
       uploading,
       tryCreateReminder,
+      applyReminder,
     ],
   );
 
