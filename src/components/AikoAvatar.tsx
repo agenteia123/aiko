@@ -113,11 +113,21 @@ function AikoModel({ reaction, onReady, dragRotation, onBodyHit }: AikoModelProp
     const hipsPosition = hips?.getWorldPosition(point.clone());
     const facingBack = Math.cos(dragRotation.current.y) < -0.25;
 
-    if (headPosition && event.point.distanceTo(headPosition) < 0.34) {
+    const insideHead = headPosition
+      ? Math.abs(event.point.x - headPosition.x) < 0.3 && Math.abs(event.point.y - headPosition.y) < 0.36
+      : false;
+    const insideChest = chestPosition
+      ? Math.abs(event.point.x - chestPosition.x) < 0.43 && Math.abs(event.point.y - chestPosition.y) < 0.46
+      : false;
+    const insideHips = hipsPosition
+      ? Math.abs(event.point.x - hipsPosition.x) < 0.42 && Math.abs(event.point.y - hipsPosition.y) < 0.38
+      : false;
+
+    if (insideHead) {
       onBodyHit("head");
-    } else if (hipsPosition && event.point.distanceTo(hipsPosition) < 0.4 && facingBack) {
+    } else if (insideHips && facingBack) {
       onBodyHit("butt");
-    } else if (chestPosition && event.point.distanceTo(chestPosition) < 0.38 && !facingBack) {
+    } else if (insideChest && !facingBack) {
       onBodyHit("chest");
     } else {
       onBodyHit("body");
@@ -155,15 +165,16 @@ export function AikoAvatar({ onClick, onAffectionChange, reactionOverride }: Aik
     const messages = {
       head: ["Eso sí me gusta…", "Je, je… gracias."],
       body: ["¡Hola, Alejandro!", "Estoy aquí contigo."],
-      chest: ["¡Pervertido!", "¡Oye! No me toques ahí."],
-      butt: ["¡¿Qué estás haciendo?!", "¡Eso te costará mucho cariño!"],
+      chest: ["¡Pervertido! No me toques ahí.", "¡Oye! Te dije que ahí no."],
+      butt: ["¡¿Qué estás haciendo?! No vuelvas a tocarme ahí.", "¡Pervertido! Eso te costará mucho cariño."],
     } as const;
 
     setReaction(inappropriateTouch ? "angry" : "hearts");
     const id = Date.now();
     setHearts(inappropriateTouch ? [] : [id, id + 1, id + 2, id + 3, id + 4]);
     const options = messages[bodyPart];
-    setThought(options[Math.floor(Math.random() * options.length)]);
+    const message = options[Math.floor(Math.random() * options.length)];
+    setThought(message);
     if (thoughtTimer.current) window.clearTimeout(thoughtTimer.current);
     thoughtTimer.current = window.setTimeout(() => setThought(null), 2600);
 
@@ -175,6 +186,15 @@ export function AikoAvatar({ onClick, onAffectionChange, reactionOverride }: Aik
     if (bodyPart === "chest") loseXP(15, "chestTouch");
     else if (bodyPart === "butt") loseXP(25, "buttTouch");
     else onClick?.();
+
+    if (inappropriateTouch && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      const spokenReaction = new SpeechSynthesisUtterance(message);
+      spokenReaction.lang = "es-PE";
+      spokenReaction.rate = 1.04;
+      spokenReaction.pitch = 1.12;
+      window.speechSynthesis.speak(spokenReaction);
+    }
     onAffectionChange?.(affectionAmount, bodyPart);
   }
 
