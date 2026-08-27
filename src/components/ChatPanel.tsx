@@ -138,13 +138,23 @@ function looksLikeReminderRefusal(text: string): boolean {
 }
 
 function formatReminderWhen(at: number | string): string {
-  const d = new Date(at);
+  const d = new Date(normalizeReminderAt(at));
   return d.toLocaleString("es-PE", {
     day: "2-digit",
     month: "short",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: "America/Lima",
   });
+}
+
+function normalizeReminderAt(at: number | string): number {
+  if (typeof at === "number") return at;
+  const value = at.trim();
+  // El backend trabaja en UTC, pero algunas respuestas ISO pueden llegar sin
+  // el sufijo Z. Sin él, el navegador asumiría erróneamente la hora local.
+  const hasTimeZone = /(?:z|[+-]\d{2}:?\d{2})$/i.test(value);
+  return new Date(hasTimeZone ? value : `${value}Z`).getTime();
 }
 
 function dayLabel(ts: number): string {
@@ -446,10 +456,7 @@ export function ChatPanel({
 
   const applyReminder = useCallback(
     (payload: { text: string; at: number | string }) => {
-      const atMs =
-        typeof payload.at === "string"
-          ? new Date(payload.at).getTime()
-          : payload.at;
+      const atMs = normalizeReminderAt(payload.at);
       if (!payload.text || !Number.isFinite(atMs)) return false;
 
       const items = store.loadReminders();
@@ -558,25 +565,24 @@ export function ChatPanel({
         let replyText =
           data.response || "No pude procesar tu mensaje correctamente.";
 
-        if (backendReminder?.at) {
+        const reminderAt = localIntent?.at ?? backendReminder?.at;
+
+        if (backendReminder?.at || localIntent) {
           applyReminder({
-            text: backendReminder.text || localIntent?.text || "Recordatorio",
-            at: backendReminder.at,
+            text: backendReminder?.text || localIntent?.text || "Recordatorio",
+            at: reminderAt!,
           });
-        } else if (localIntent) {
-          applyReminder({ text: localIntent.text, at: localIntent.at });
         }
 
-        if (
-          (backendReminder || localIntent) &&
-          looksLikeReminderRefusal(replyText)
-        ) {
-          const src = backendReminder || {
-            text: localIntent!.text,
-            at: new Date(localIntent!.at).toISOString(),
-            minutes: undefined,
+        if (backendReminder || localIntent) {
+          const src = {
+            text: backendReminder?.text || localIntent!.text,
+            at: reminderAt!,
           };
-          replyText = `Listo, Ale. Quedó el recordatorio: ${src.text} · ${formatReminderWhen(src.at)} ⏰`;
+          const prefix = looksLikeReminderRefusal(replyText)
+            ? "Sí puedo hacerlo. Listo"
+            : "Listo";
+          replyText = `${prefix}, Ale. Quedó el recordatorio: ${src.text} · ${formatReminderWhen(src.at)} ⏰`;
         }
 
         const reply: ChatMessage = {
