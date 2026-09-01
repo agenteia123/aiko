@@ -13,7 +13,7 @@ import {
 } from "@/components/CommandPalette";
 import {
   MemoryPanel,
-  ModelsPanel,
+  ModelsPanel, 
   SettingsPanel,
   ToolsPanel,
   VoicePanel,
@@ -44,7 +44,9 @@ function AikoApp() {
   const [reaction, setReaction] = useState<"idle" | "hearts">("idle");
   const [subtitle, setSubtitle] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [showAvatarStage, setShowAvatarStage] = useState(false);
+  // Se inicia visible para que en escritorio Aiko no desaparezca durante el
+  // primer render. El efecto inferior la desactiva solo en el rango tablet.
+  const [showAvatarStage, setShowAvatarStage] = useState(true);
   const [floatingReminder, setFloatingReminder] =
     useState<FloatingReminder | null>(null);
 
@@ -445,9 +447,8 @@ function AikoApp() {
 
           {/* Stage — avatar */}
           <section
-            className={`aiko-mobile-stage glass-panel relative order-1 h-[clamp(11.5rem,30dvh,16rem)] min-h-0 min-w-0 flex-none items-center justify-center overflow-hidden rounded-2xl sm:hidden min-[1180px]:order-none min-[1180px]:flex min-[1180px]:h-auto min-[1180px]:flex-1 min-[1180px]:basis-0 ${
-              tab === "chat" ? "flex" : "hidden"
-            }`}
+            data-mobile-visible={tab === "chat"}
+            className="aiko-mobile-stage glass-panel relative order-1 flex h-[clamp(11.5rem,30dvh,16rem)] min-h-0 min-w-0 flex-none items-center justify-center overflow-hidden rounded-2xl sm:hidden min-[1180px]:order-0 min-[1180px]:flex min-[1180px]:h-auto min-[1180px]:flex-1 min-[1180px]:basis-0"
           >
             {showAvatarStage && (
               <AikoAvatar
@@ -477,7 +478,7 @@ function AikoApp() {
           </section>
 
           {/* Right pane */}
-          <section className="order-2 flex min-h-0 min-w-0 flex-1 flex-col transition-[width] duration-300 sm:order-none min-[1180px]:w-[clamp(26rem,30vw,36rem)] min-[1180px]:flex-none">
+          <section className="order-2 flex min-h-0 min-w-0 flex-1 flex-col transition-[width] duration-300 sm:order-0 min-[1180px]:order-1 min-[1180px]:w-[clamp(26rem,30vw,36rem)] min-[1180px]:flex-none">
             {tab === "chat" && (
               <ChatPanel
                 onAikoSpeak={speak}

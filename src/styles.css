@@ -315,6 +315,11 @@
     padding-left: env(safe-area-inset-left);
   }
 
+  /* El avatar acompaña al chat; los demás módulos aprovechan toda la pantalla. */
+  .aiko-mobile-stage[data-mobile-visible="false"] {
+    display: none;
+  }
+
   /* Al abrir el teclado, el chat usa toda la altura disponible. */
   .aiko-mobile-shell:has(.aiko-chat-input:focus) .aiko-mobile-stage,
   .aiko-mobile-shell:has(.aiko-chat-input:focus) .aiko-mobile-nav {
@@ -344,4 +349,3 @@
     transition-duration: 0.01ms !important;
   }
 }
-
