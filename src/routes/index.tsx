@@ -13,7 +13,7 @@ import {
 } from "@/components/CommandPalette";
 import {
   MemoryPanel,
-  ModelsPanel, 
+  ModelsPanel,
   SettingsPanel,
   ToolsPanel,
   VoicePanel,
@@ -448,7 +448,7 @@ function AikoApp() {
           {/* Stage — avatar */}
           <section
             data-mobile-visible={tab === "chat"}
-            className="aiko-mobile-stage glass-panel relative order-1 flex h-[clamp(11.5rem,30dvh,16rem)] min-h-0 min-w-0 flex-none items-center justify-center overflow-hidden rounded-2xl sm:hidden min-[1180px]:order-0 min-[1180px]:flex min-[1180px]:h-auto min-[1180px]:flex-1 min-[1180px]:basis-0"
+            className="aiko-avatar-stage aiko-mobile-stage glass-panel relative min-h-0 min-w-0 items-center justify-center overflow-hidden rounded-2xl"
           >
             {showAvatarStage && (
               <AikoAvatar
@@ -478,7 +478,7 @@ function AikoApp() {
           </section>
 
           {/* Right pane */}
-          <section className="order-2 flex min-h-0 min-w-0 flex-1 flex-col transition-[width] duration-300 sm:order-0 min-[1180px]:order-1 min-[1180px]:w-[clamp(26rem,30vw,36rem)] min-[1180px]:flex-none">
+          <section className="aiko-content-pane min-h-0 min-w-0 flex-col transition-[width] duration-300">
             {tab === "chat" && (
               <ChatPanel
                 onAikoSpeak={speak}

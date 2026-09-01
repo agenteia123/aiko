@@ -306,6 +306,52 @@
 }
 .aiko-message-in { animation: aiko-message-in 260ms cubic-bezier(0.22, 1, 0.36, 1); }
 
+/* --------- Distribución responsiva principal ---------
+   Se controla aquí para evitar conflictos entre `sm:hidden` y breakpoints
+   arbitrarios de Tailwind. */
+.aiko-avatar-stage {
+  display: flex;
+  order: 1;
+  height: clamp(11.5rem, 30dvh, 16rem);
+  flex: 0 0 auto;
+}
+
+.aiko-content-pane {
+  display: flex;
+  order: 2;
+  width: auto;
+  flex: 1 1 0%;
+}
+
+/* Tablet: se prioriza el contenido y se conserva la barra lateral compacta. */
+@media (min-width: 640px) and (max-width: 1179px) {
+  .aiko-avatar-stage {
+    display: none;
+  }
+
+  .aiko-content-pane {
+    order: 0;
+    width: auto;
+    flex: 1 1 0%;
+  }
+}
+
+/* PC: barra lateral, escenario 3D flexible y chat a la derecha. */
+@media (min-width: 1180px) {
+  .aiko-avatar-stage {
+    display: flex;
+    order: 0;
+    height: auto;
+    flex: 1 1 0%;
+  }
+
+  .aiko-content-pane {
+    order: 1;
+    width: clamp(26rem, 30vw, 36rem);
+    flex: 0 0 auto;
+  }
+}
+
 /* --------- Adaptación para navegadores móviles --------- */
 @media (max-width: 639px) {
   .aiko-app-shell {
