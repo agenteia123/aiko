@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Minus, Square, X, Pin } from "lucide-react";
+import { MessageCircle, Minus, Square, X, Pin } from "lucide-react";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { AikoAvatar } from "@/components/AikoAvatar";
@@ -44,6 +44,7 @@ function AikoApp() {
   const [reaction, setReaction] = useState<"idle" | "hearts">("idle");
   const [subtitle, setSubtitle] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [chatCollapsed, setChatCollapsed] = useState(false);
   // Se inicia visible para que en escritorio Aiko no desaparezca durante el
   // primer render. El efecto inferior la desactiva solo en el rango tablet.
   const [showAvatarStage, setShowAvatarStage] = useState(true);
@@ -435,14 +436,27 @@ function AikoApp() {
           onToggleAlwaysOnTop={() => setAlwaysOnTop((v) => !v)}
         />
 
-        <div className="aiko-mobile-shell flex min-h-0 min-w-0 flex-1 flex-col gap-1 p-1 sm:flex-row sm:gap-2 sm:p-2 lg:gap-3 lg:p-3">
+        <div
+          data-chat-collapsed={tab === "chat" && chatCollapsed}
+          className="aiko-mobile-shell relative flex min-h-0 min-w-0 flex-1 flex-col gap-1 p-1 sm:flex-row sm:gap-2 sm:p-2 lg:gap-3 lg:p-3"
+        >
           <AikoSidebar
             active={tab}
-            onChange={setTab}
+            onChange={(nextTab) => {
+              setTab(nextTab);
+              if (nextTab !== "chat") setChatCollapsed(false);
+            }}
             alwaysOnTop={alwaysOnTop}
             onToggleAlwaysOnTop={() => setAlwaysOnTop((v) => !v)}
             onOpenCommandPalette={() => setPaletteOpen(true)}
-            onNewConversation={() => actionsRef.current?.newConversation()}
+            onNewConversation={() => {
+              setTab("chat");
+              setChatCollapsed(false);
+              window.setTimeout(
+                () => actionsRef.current?.newConversation(),
+                20,
+              );
+            }}
           />
 
           {/* Stage — avatar */}
@@ -450,7 +464,7 @@ function AikoApp() {
             data-mobile-visible={tab === "chat"}
             className="aiko-avatar-stage aiko-mobile-stage glass-panel relative min-h-0 min-w-0 items-center justify-center overflow-hidden rounded-2xl"
           >
-            {showAvatarStage && (
+            {(showAvatarStage || chatCollapsed) && (
               <AikoAvatar
                 onClick={onAvatarClick}
                 reactionOverride={reaction === "hearts" ? "hearts" : undefined}
@@ -478,10 +492,14 @@ function AikoApp() {
           </section>
 
           {/* Right pane */}
-          <section className="aiko-content-pane min-h-0 min-w-0 flex-col transition-[width] duration-300">
+          <section
+            data-chat-collapsed={tab === "chat" && chatCollapsed}
+            className="aiko-content-pane min-h-0 min-w-0 flex-col transition-[width] duration-300"
+          >
             {tab === "chat" && (
               <ChatPanel
                 onAikoSpeak={speak}
+                onCollapse={() => setChatCollapsed(true)}
                 language={language}
                 registerActions={(a) => {
                   actionsRef.current = a;
@@ -525,6 +543,22 @@ function AikoApp() {
               />
             )}
           </section>
+
+          {tab === "chat" && chatCollapsed && (
+            <button
+              type="button"
+              onClick={() => setChatCollapsed(false)}
+              className="aiko-chat-bubble group"
+              aria-label="Abrir el chat con Aiko"
+              title="Abrir chat"
+            >
+              <span className="absolute right-0.5 top-0.5 h-3 w-3 rounded-full border-2 border-[#171923] bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,.8)]" />
+              <MessageCircle className="h-5 w-5 fill-primary/15 text-primary transition-transform group-hover:scale-110" />
+              <span className="hidden text-xs font-semibold sm:inline">
+                Abrir chat
+              </span>
+            </button>
+          )}
         </div>
       </div>
 

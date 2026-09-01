@@ -28,6 +28,7 @@ import {
   Clock3,
   Square,
   ChevronDown,
+  PanelRightClose,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -49,6 +50,7 @@ import { store } from "@/lib/productivity";
 
 interface ChatPanelProps {
   onAikoSpeak?: (text: string) => void;
+  onCollapse?: () => void;
   registerActions?: (a: ChatActions) => void;
   language: string;
 }
@@ -262,6 +264,7 @@ async function copyToClipboard(text: string): Promise<void> {
 
 export function ChatPanel({
   onAikoSpeak,
+  onCollapse,
   registerActions,
   language,
 }: ChatPanelProps) {
@@ -856,6 +859,18 @@ export function ChatPanel({
               </button>
             ))}
           </div>
+
+          {onCollapse && (
+            <button
+              type="button"
+              onClick={onCollapse}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/5 text-muted-foreground transition hover:bg-primary/15 hover:text-primary"
+              title="Convertir el chat en burbuja"
+              aria-label="Minimizar chat"
+            >
+              <PanelRightClose className="h-4 w-4" />
+            </button>
+          )}
 
           <button
             onClick={() => setHistoryOpen((v) => !v)}
