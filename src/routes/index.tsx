@@ -1,24 +1,23 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { MessageCircle, Minus, Square, X, Pin } from "lucide-react";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
-import { AikoAvatar } from "@/components/AikoAvatar";
 import { AikoSidebar, type TabId } from "@/components/AikoSidebar";
-import { ChatPanel, type ChatActions } from "@/components/ChatPanel";
+import type { ChatActions } from "@/components/ChatPanel";
 import {
   CommandPalette,
   CommandIcons,
   type Command,
 } from "@/components/CommandPalette";
-import {
-  MemoryPanel,
-  ModelsPanel,
-  SettingsPanel,
-  ToolsPanel,
-  VoicePanel,
-} from "@/components/panels";
-import { ProductivityPanel } from "@/components/ProductivityPanel";
 import {
   ReminderToast,
   type FloatingReminder,
@@ -34,6 +33,52 @@ import { store, type Reminder } from "@/lib/productivity";
 import { gainXP, onLevelUp, titleFor } from "@/lib/affection";
 import { sfx } from "@/lib/sfx";
 
+// Three.js, VRM y ReactMarkdown son paquetes pesados. Se cargan en fragmentos
+// separados para que la interfaz aparezca primero en celulares lentos.
+const LazyAikoAvatar = lazy(() =>
+  import("@/components/AikoAvatar").then((module) => ({
+    default: module.AikoAvatar,
+  })),
+);
+
+const LazyChatPanel = lazy(() =>
+  import("@/components/ChatPanel").then((module) => ({
+    default: module.ChatPanel,
+  })),
+);
+
+const LazyProductivityPanel = lazy(() =>
+  import("@/components/ProductivityPanel").then((module) => ({
+    default: module.ProductivityPanel,
+  })),
+);
+
+const LazyVoicePanel = lazy(() =>
+  import("@/components/panels").then((module) => ({
+    default: module.VoicePanel,
+  })),
+);
+const LazyModelsPanel = lazy(() =>
+  import("@/components/panels").then((module) => ({
+    default: module.ModelsPanel,
+  })),
+);
+const LazyMemoryPanel = lazy(() =>
+  import("@/components/panels").then((module) => ({
+    default: module.MemoryPanel,
+  })),
+);
+const LazyToolsPanel = lazy(() =>
+  import("@/components/panels").then((module) => ({
+    default: module.ToolsPanel,
+  })),
+);
+const LazySettingsPanel = lazy(() =>
+  import("@/components/panels").then((module) => ({
+    default: module.SettingsPanel,
+  })),
+);
+
 export const Route = createFileRoute("/")({
   component: AikoApp,
 });
@@ -45,6 +90,7 @@ function AikoApp() {
   const [subtitle, setSubtitle] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [chatCollapsed, setChatCollapsed] = useState(false);
+  const [avatarBootReady, setAvatarBootReady] = useState(false);
   // Se inicia visible para que en escritorio Aiko no desaparezca durante el
   // primer render. El efecto inferior la desactiva solo en el rango tablet.
   const [showAvatarStage, setShowAvatarStage] = useState(true);
@@ -52,6 +98,12 @@ function AikoApp() {
     useState<FloatingReminder | null>(null);
 
   useTheme();
+  useEffect(() => {
+    // Permite que el menú y el chat pinten antes de descargar el motor 3D.
+    const timer = window.setTimeout(() => setAvatarBootReady(true), 180);
+    return () => window.clearTimeout(timer);
+  }, []);
+
   useEffect(() => {
     requestNotificationPermission();
     const off = onLevelUp((level) => {
@@ -465,10 +517,18 @@ function AikoApp() {
             className="aiko-avatar-stage aiko-mobile-stage glass-panel relative min-h-0 min-w-0 items-center justify-center overflow-hidden rounded-2xl"
           >
             {(showAvatarStage || chatCollapsed) && (
-              <AikoAvatar
-                onClick={onAvatarClick}
-                reactionOverride={reaction === "hearts" ? "hearts" : undefined}
-              />
+              <Suspense fallback={<AvatarLoadingState />}>
+                {avatarBootReady ? (
+                  <LazyAikoAvatar
+                    onClick={onAvatarClick}
+                    reactionOverride={
+                      reaction === "hearts" ? "hearts" : undefined
+                    }
+                  />
+                ) : (
+                  <AvatarLoadingState />
+                )}
+              </Suspense>
             )}
             {subtitle && (
               <div
@@ -497,50 +557,82 @@ function AikoApp() {
             className="aiko-content-pane min-h-0 min-w-0 flex-col transition-[width] duration-300"
           >
             {tab === "chat" && (
-              <ChatPanel
-                onAikoSpeak={speak}
-                onCollapse={() => setChatCollapsed(true)}
-                language={language}
-                registerActions={(a) => {
-                  actionsRef.current = a;
-                }}
-              />
+              <Suspense fallback={<PanelLoadingState label="Preparando chat…" />}>
+                <LazyChatPanel
+                  onAikoSpeak={speak}
+                  onCollapse={() => setChatCollapsed(true)}
+                  language={language}
+                  registerActions={(a) => {
+                    actionsRef.current = a;
+                  }}
+                />
+              </Suspense>
             )}
-            {tab === "productivity" && <ProductivityPanel />}
-            {tab === "voice" && <VoicePanel {...voiceProps} />}
-            {tab === "models" && <ModelsPanel {...modelProps} />}
-            {tab === "memory" && <MemoryPanel />}
+            {tab === "productivity" && (
+              <Suspense
+                fallback={<PanelLoadingState label="Cargando productividad…" />}
+              >
+                <LazyProductivityPanel />
+              </Suspense>
+            )}
+            {tab === "voice" && (
+              <Suspense fallback={<PanelLoadingState label="Cargando voz…" />}>
+                <LazyVoicePanel {...voiceProps} />
+              </Suspense>
+            )}
+            {tab === "models" && (
+              <Suspense
+                fallback={<PanelLoadingState label="Cargando modelos…" />}
+              >
+                <LazyModelsPanel {...modelProps} />
+              </Suspense>
+            )}
+            {tab === "memory" && (
+              <Suspense
+                fallback={<PanelLoadingState label="Cargando memoria…" />}
+              >
+                <LazyMemoryPanel />
+              </Suspense>
+            )}
             {tab === "tools" && (
-              <ToolsPanel
-                onRunQuickSearch={() => {
-                  setTab("chat");
-                  setTimeout(() => actionsRef.current?.runQuickSearch(), 20);
-                }}
-                onRunDeepSearch={() => {
-                  setTab("chat");
-                  setTimeout(() => actionsRef.current?.runDeepSearch(), 20);
-                }}
-                onSummarizeMemory={() => {
-                  setTab("chat");
-                  setTimeout(() => actionsRef.current?.summarizeMemory(), 20);
-                }}
-                onScreenshot={() => {
-                  setTab("chat");
-                  setTimeout(() => actionsRef.current?.takeScreenshot(), 20);
-                }}
-              />
+              <Suspense
+                fallback={<PanelLoadingState label="Cargando herramientas…" />}
+              >
+                <LazyToolsPanel
+                  onRunQuickSearch={() => {
+                    setTab("chat");
+                    setTimeout(() => actionsRef.current?.runQuickSearch(), 20);
+                  }}
+                  onRunDeepSearch={() => {
+                    setTab("chat");
+                    setTimeout(() => actionsRef.current?.runDeepSearch(), 20);
+                  }}
+                  onSummarizeMemory={() => {
+                    setTab("chat");
+                    setTimeout(() => actionsRef.current?.summarizeMemory(), 20);
+                  }}
+                  onScreenshot={() => {
+                    setTab("chat");
+                    setTimeout(() => actionsRef.current?.takeScreenshot(), 20);
+                  }}
+                />
+              </Suspense>
             )}
             {tab === "settings" && (
-              <SettingsPanel
-                modelFolder={modelFolder}
-                setModelFolder={setModelFolder}
-                language={language}
-                setLanguage={setLanguage}
-                voiceProps={voiceProps}
-                modelProps={modelProps}
-                onClearChat={clearActiveChat}
-                onClearAll={clearAllHistory}
-              />
+              <Suspense
+                fallback={<PanelLoadingState label="Cargando ajustes…" />}
+              >
+                <LazySettingsPanel
+                  modelFolder={modelFolder}
+                  setModelFolder={setModelFolder}
+                  language={language}
+                  setLanguage={setLanguage}
+                  voiceProps={voiceProps}
+                  modelProps={modelProps}
+                  onClearChat={clearActiveChat}
+                  onClearAll={clearAllHistory}
+                />
+              </Suspense>
             )}
           </section>
 
@@ -576,6 +668,28 @@ function AikoApp() {
       />
 
       <Toaster />
+    </div>
+  );
+}
+
+function AvatarLoadingState() {
+  return (
+    <div className="flex h-full w-full flex-col items-center justify-center gap-3 text-center">
+      <span className="h-9 w-9 animate-spin rounded-full border-2 border-white/15 border-t-pink-300" />
+      <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+        Preparando a Aiko
+      </span>
+    </div>
+  );
+}
+
+function PanelLoadingState({ label }: { label: string }) {
+  return (
+    <div className="flex h-full w-full items-center justify-center rounded-2xl border border-white/10 bg-[#0f1117]/92">
+      <div className="flex items-center gap-2.5 text-xs text-muted-foreground">
+        <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/15 border-t-primary" />
+        {label}
+      </div>
     </div>
   );
 }

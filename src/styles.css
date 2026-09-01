@@ -304,7 +304,12 @@
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
-.aiko-message-in { animation: aiko-message-in 260ms cubic-bezier(0.22, 1, 0.36, 1); }
+.aiko-message-in {
+  content-visibility: auto;
+  contain: layout paint style;
+  contain-intrinsic-size: auto 180px;
+  animation: aiko-message-in 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
 
 /* --------- Distribución responsiva principal ---------
    Se controla aquí para evitar conflictos entre `sm:hidden` y breakpoints
@@ -450,6 +455,20 @@
 
   .aiko-chat-input {
     font-size: 16px;
+  }
+
+  /* El desenfoque grande y las sombras múltiples son costosos en GPUs
+     móviles. Se conserva el efecto visual con una versión más ligera. */
+  .glass-panel {
+    backdrop-filter: blur(9px) saturate(115%);
+  }
+
+  .neon-pink {
+    box-shadow: 0 0 22px oklch(0.82 0.17 355 / 24%);
+  }
+
+  .neon-teal {
+    box-shadow: 0 0 20px oklch(0.82 0.14 195 / 24%);
   }
 
   body {

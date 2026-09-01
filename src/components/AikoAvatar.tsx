@@ -42,15 +42,21 @@ function usePerformanceProfile() {
   const [visible, setVisible] = useState(
     () => typeof document === "undefined" || !document.hidden,
   );
-  const lowPower = useMemo(() => {
-    if (typeof navigator === "undefined") return false;
+  const profile = useMemo(() => {
+    if (typeof navigator === "undefined") {
+      return { mobile: false, lowPower: false };
+    }
     const nav = navigator as Navigator & { deviceMemory?: number };
     const cores = nav.hardwareConcurrency || 4;
     const limitedMemory =
       typeof nav.deviceMemory === "number" && nav.deviceMemory <= 4;
-    // Se reserva 60 FPS para equipos holgados. En hardware modesto, 30 FPS
-    // mantiene el movimiento fluido y reduce considerablemente el uso de GPU.
-    return cores < 8 || limitedMemory;
+    const mobile =
+      nav.maxTouchPoints > 0 &&
+      (window.matchMedia?.("(pointer: coarse)").matches ||
+        window.innerWidth < 768);
+    // Los teléfonos usan siempre el perfil eficiente aunque reporten ocho
+    // núcleos o mucha RAM, datos que no reflejan la potencia real de su GPU.
+    return { mobile, lowPower: mobile || cores < 8 || limitedMemory };
   }, []);
 
   useEffect(() => {
@@ -59,7 +65,7 @@ function usePerformanceProfile() {
     return () => document.removeEventListener("visibilitychange", onVisibility);
   }, []);
 
-  return { visible, lowPower };
+  return { visible, ...profile };
 }
 
 function CameraRig() {
@@ -77,6 +83,17 @@ function CameraRig() {
     camera.lookAt(0, 0.9, 0);
     camera.updateProjectionMatrix();
   }, [camera, size.height, size.width]);
+  return null;
+}
+
+function FrameLimiter({ active, fps }: { active: boolean; fps: number }) {
+  const invalidate = useThree((state) => state.invalidate);
+  useEffect(() => {
+    if (!active) return;
+    const interval = window.setInterval(invalidate, Math.round(1000 / fps));
+    invalidate();
+    return () => window.clearInterval(interval);
+  }, [active, fps, invalidate]);
   return null;
 }
 
@@ -344,11 +361,15 @@ export function AikoAvatar({
   const [thought, setThought] = useState<string | null>(null);
   const resetTimer = useRef<number | null>(null);
   const thoughtTimer = useRef<number | null>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const dragRotation = useRef({ x: 0, y: 0 });
   const drag = useRef({ active: false, moved: false, x: 0, y: 0 });
   const bodyHit = useRef<"head" | "body" | "chest" | "butt" | null>(null);
   const affection = useAffection();
-  const { visible, lowPower } = usePerformanceProfile();
+  const { visible, lowPower, mobile } = usePerformanceProfile();
+  const [inViewport, setInViewport] = useState(true);
+  const activeRender = visible && inViewport;
+  const targetFps = mobile ? 24 : lowPower ? 30 : 60;
   const effective =
     reaction !== "idle" ? reaction : (reactionOverride ?? "idle");
   const handleReady = useCallback(() => setReady(true), []);
@@ -358,6 +379,17 @@ export function AikoAvatar({
     },
     [],
   );
+
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setInViewport(Boolean(entry?.isIntersecting)),
+      { threshold: 0.01 },
+    );
+    observer.observe(stage);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(
     () => () => {
@@ -532,7 +564,10 @@ export function AikoAvatar({
   const glowOpacity = Math.min(0.72, 0.34 + affection.level * 0.035);
 
   return (
-    <div className="relative isolate flex h-full min-h-0 w-full items-center justify-center overflow-hidden select-none sm:min-h-[32rem]">
+    <div
+      ref={stageRef}
+      className="relative isolate flex h-full min-h-0 w-full items-center justify-center overflow-hidden select-none sm:min-h-[32rem]"
+    >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,rgba(255,115,184,0.16),transparent_28%),radial-gradient(circle_at_50%_77%,rgba(45,212,239,0.13),transparent_36%),linear-gradient(180deg,rgba(255,255,255,0.018),transparent_45%,rgba(2,8,23,0.08))]" />
       <div className="pointer-events-none absolute left-1/2 top-[54%] aspect-square w-[min(68vh,43rem)] -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/[0.055]" />
       <div className="pointer-events-none absolute left-1/2 top-[54%] aspect-square w-[min(52vh,33rem)] -translate-x-1/2 -translate-y-1/2 rounded-full border border-pink-300/[0.08]" />
@@ -578,23 +613,24 @@ export function AikoAvatar({
         className="relative z-10 h-full w-full cursor-grab touch-none overflow-hidden rounded-2xl outline-none active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-pink-300/60"
       >
         <Canvas
-          dpr={lowPower ? 1 : [1, 1.35]}
-          frameloop={visible ? "always" : "never"}
+          dpr={mobile ? 0.85 : lowPower ? 1 : [1, 1.35]}
+          frameloop={lowPower ? "demand" : activeRender ? "always" : "never"}
           camera={{ fov: 28, near: 0.1, far: 20, position: [0, 1.08, 2.78] }}
           gl={{
             alpha: true,
             antialias: !lowPower,
-            powerPreference: "high-performance",
+            powerPreference: mobile ? "low-power" : "high-performance",
             preserveDrawingBuffer: false,
           }}
-          performance={{ min: 0.5 }}
+          performance={{ min: mobile ? 0.35 : 0.5 }}
           onCreated={({ gl }) => gl.setClearColor(0x000000, 0)}
         >
           <CameraRig />
-          <ambientLight intensity={1.35} />
+          <FrameLimiter active={activeRender && lowPower} fps={targetFps} />
+          <ambientLight intensity={mobile ? 1.25 : 1.35} />
           <directionalLight
             position={[2.5, 4, 3]}
-            intensity={2.1}
+            intensity={mobile ? 1.85 : 2.1}
             color="#ffe5f2"
           />
           <directionalLight
@@ -602,14 +638,20 @@ export function AikoAvatar({
             intensity={1.15}
             color="#8be7ff"
           />
-          <pointLight position={[0, 0.8, 2]} intensity={0.75} color="#ffffff" />
+          {!mobile && (
+            <pointLight
+              position={[0, 0.8, 2]}
+              intensity={0.75}
+              color="#ffffff"
+            />
+          )}
           <Suspense fallback={null}>
             <AikoModel
               reaction={effective}
               onReady={handleReady}
               dragRotation={dragRotation}
               onBodyHit={handleBodyHit}
-              frameInterval={lowPower ? 1 / 30 : 1 / 60}
+              frameInterval={1 / targetFps}
             />
           </Suspense>
         </Canvas>

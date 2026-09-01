@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  memo,
   useMemo,
   useRef,
   useState,
@@ -285,6 +286,7 @@ export function ChatPanel({
   const [historyOpen, setHistoryOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [visibleMessageCount, setVisibleMessageCount] = useState(50);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const sendTextRef = useRef<
@@ -343,7 +345,11 @@ export function ChatPanel({
     setConversations(list);
     const prev = loadActiveId();
     setActiveId(prev && list.find((c) => c.id === prev) ? prev : list[0].id);
-    setTimeout(() => inputRef.current?.focus(), 20);
+    // En celular no se abre el teclado automáticamente: hacerlo reduce el
+    // viewport, oculta el avatar y retrasa la primera interacción visual.
+    if (!window.matchMedia("(pointer: coarse)").matches) {
+      setTimeout(() => inputRef.current?.focus(), 20);
+    }
   }, []);
 
   const active = useMemo(
@@ -794,8 +800,13 @@ export function ChatPanel({
     return list.filter((c) => c.title.toLowerCase().includes(q));
   }, [conversations, search]);
 
+  useEffect(() => {
+    setVisibleMessageCount(50);
+  }, [activeId]);
+
   const timeline = useMemo(() => {
-    const msgs = active?.messages || [];
+    const allMessages = active?.messages || [];
+    const msgs = allMessages.slice(-visibleMessageCount);
     const items: { type: "day" | "msg"; label?: string; msg?: ChatMessage }[] =
       [];
     let lastDay = "";
@@ -808,7 +819,10 @@ export function ChatPanel({
       items.push({ type: "msg", msg: m });
     }
     return items;
-  }, [active?.messages]);
+  }, [active?.messages, visibleMessageCount]);
+
+  const hasEarlierMessages =
+    (active?.messages.length || 0) > visibleMessageCount;
 
   return (
     <div className="relative flex h-full w-full min-w-0 max-w-full overflow-hidden rounded-xl border border-white/10 bg-[#0f1117]/95 shadow-2xl sm:rounded-2xl">
@@ -905,6 +919,18 @@ export function ChatPanel({
           onScroll={handleChatScroll}
           className="min-w-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto px-2 py-3 overscroll-contain sm:space-y-5 sm:px-6 sm:py-5 lg:px-8"
         >
+          {hasEarlierMessages && (
+            <div className="flex justify-center pb-1">
+              <button
+                type="button"
+                onClick={() => setVisibleMessageCount((count) => count + 50)}
+                className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11px] font-medium text-muted-foreground transition hover:border-primary/30 hover:bg-primary/10 hover:text-foreground"
+              >
+                Cargar mensajes anteriores
+              </button>
+            </div>
+          )}
+
           {timeline.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center px-4 text-center">
               <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/25 to-accent/15 ring-1 ring-primary/20">
@@ -1152,7 +1178,7 @@ export function ChatPanel({
   );
 }
 
-function MessageBubble({
+const MessageBubble = memo(function MessageBubble({
   msg,
   onEdit,
   edited = false,
@@ -1204,7 +1230,7 @@ function MessageBubble({
   return (
     <div
       className={cn(
-        "flex min-w-0 gap-2 sm:gap-3",
+        "aiko-message-in flex min-w-0 gap-2 sm:gap-3",
         isUser ? "justify-end" : "justify-start",
       )}
     >
@@ -1511,7 +1537,7 @@ function MessageBubble({
       </div>
     </div>
   );
-}
+});
 
 function MarkdownTable({ children }: { children: ReactNode }) {
   const [copied, setCopied] = useState(false);
