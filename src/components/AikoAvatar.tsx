@@ -67,10 +67,12 @@ function CameraRig() {
   useEffect(() => {
     const compact = size.width < 600;
     const shortViewport = size.height < 650;
+    const mobileStage = size.height < 360;
     camera.position.set(
       0,
       compact ? 1.04 : 1.08,
-      (compact ? 3.15 : 2.78) + (shortViewport ? 0.28 : 0),
+      (compact ? 3.15 : 2.78) +
+        (mobileStage ? 0.78 : shortViewport ? 0.28 : 0),
     );
     camera.lookAt(0, 0.9, 0);
     camera.updateProjectionMatrix();
@@ -530,7 +532,7 @@ export function AikoAvatar({
   const glowOpacity = Math.min(0.72, 0.34 + affection.level * 0.035);
 
   return (
-    <div className="relative isolate flex h-full min-h-[32rem] w-full items-center justify-center overflow-hidden select-none">
+    <div className="relative isolate flex h-full min-h-0 w-full items-center justify-center overflow-hidden select-none sm:min-h-[32rem]">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,rgba(255,115,184,0.16),transparent_28%),radial-gradient(circle_at_50%_77%,rgba(45,212,239,0.13),transparent_36%),linear-gradient(180deg,rgba(255,255,255,0.018),transparent_45%,rgba(2,8,23,0.08))]" />
       <div className="pointer-events-none absolute left-1/2 top-[54%] aspect-square w-[min(68vh,43rem)] -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/[0.055]" />
       <div className="pointer-events-none absolute left-1/2 top-[54%] aspect-square w-[min(52vh,33rem)] -translate-x-1/2 -translate-y-1/2 rounded-full border border-pink-300/[0.08]" />

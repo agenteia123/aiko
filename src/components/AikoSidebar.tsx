@@ -40,6 +40,8 @@ const SECONDARY_TABS: { id: TabId; label: string; icon: typeof Heart }[] = [
   { id: "settings", label: "Ajustes", icon: SettingsIcon },
 ];
 
+const ALL_TABS = [...PRIMARY_TABS, ...SECONDARY_TABS];
+
 interface AikoSidebarProps {
   active: TabId;
   onChange: (t: TabId) => void;
@@ -126,12 +128,49 @@ export function AikoSidebar({
   }
 
   return (
-    <aside
-      className={cn(
-        "relative isolate flex h-full shrink-0 flex-col overflow-hidden rounded-2xl border border-white/[0.09] bg-[#11131b]/95 shadow-[0_18px_60px_rgba(0,0,0,.28)] backdrop-blur-xl transition-[width] duration-300 before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-40 before:bg-[radial-gradient(circle_at_50%_0%,rgba(244,114,182,.13),transparent_68%)] after:pointer-events-none after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-gradient-to-b after:from-transparent after:via-white/[0.07] after:to-transparent",
-        expanded ? "w-60" : "w-[4.5rem]",
-      )}
-    >
+    <>
+      {/* Barra inferior móvil. Se desliza para mantener todos los módulos. */}
+      <nav
+        aria-label="Navegación principal de Aiko"
+        className="aiko-mobile-nav order-3 flex h-[4.65rem] w-full shrink-0 overflow-x-auto rounded-2xl border border-white/[0.09] bg-[#11131b]/97 px-1.5 pb-1.5 pt-1.5 shadow-[0_-12px_36px_rgba(0,0,0,.24)] backdrop-blur-xl [scrollbar-width:none] sm:hidden [&::-webkit-scrollbar]:hidden"
+      >
+        <div className="flex min-w-max flex-1 items-stretch justify-start gap-1">
+          {ALL_TABS.map(({ id, label, icon: Icon }) => {
+            const isActive = id === active;
+            return (
+              <button
+                key={id}
+                type="button"
+                aria-current={isActive ? "page" : undefined}
+                aria-label={label}
+                onClick={() => {
+                  sfx.click();
+                  onChange(id);
+                }}
+                className={cn(
+                  "relative flex min-w-[4.2rem] flex-1 flex-col items-center justify-center gap-1 rounded-xl px-2 py-1 text-[9px] font-medium transition",
+                  isActive
+                    ? "bg-primary/15 text-primary ring-1 ring-primary/25"
+                    : "text-muted-foreground active:bg-white/[0.06] active:text-foreground",
+                )}
+              >
+                {isActive && (
+                  <span className="absolute inset-x-4 top-0 h-0.5 rounded-full bg-gradient-to-r from-pink-300 to-cyan-300 shadow-[0_0_8px_rgba(244,114,182,.7)]" />
+                )}
+                <Icon className="h-[1.05rem] w-[1.05rem]" />
+                <span className="max-w-[4rem] truncate">{label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </nav>
+
+      <aside
+        className={cn(
+          "relative isolate hidden h-full shrink-0 flex-col overflow-hidden rounded-2xl border border-white/[0.09] bg-[#11131b]/95 shadow-[0_18px_60px_rgba(0,0,0,.28)] backdrop-blur-xl transition-[width] duration-300 before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-40 before:bg-[radial-gradient(circle_at_50%_0%,rgba(244,114,182,.13),transparent_68%)] after:pointer-events-none after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-gradient-to-b after:from-transparent after:via-white/[0.07] after:to-transparent sm:flex",
+          expanded ? "w-60" : "w-[4.5rem]",
+        )}
+      >
       {/* Brand */}
       <div
         className={cn(
@@ -263,6 +302,7 @@ export function AikoSidebar({
           )}
         </button>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }

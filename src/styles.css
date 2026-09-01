@@ -184,6 +184,11 @@
   body,
   #root {
     height: 100%;
+    width: 100%;
+  }
+
+  html {
+    overscroll-behavior: none;
   }
 
   body {
@@ -193,6 +198,8 @@
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     overflow: hidden;
+    min-width: 320px;
+    touch-action: manipulation;
   }
 
   h1,
@@ -299,4 +306,42 @@
 }
 .aiko-message-in { animation: aiko-message-in 260ms cubic-bezier(0.22, 1, 0.36, 1); }
 
+/* --------- Adaptación para navegadores móviles --------- */
+@media (max-width: 639px) {
+  .aiko-app-shell {
+    padding-top: env(safe-area-inset-top);
+    padding-right: env(safe-area-inset-right);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+  }
+
+  /* Al abrir el teclado, el chat usa toda la altura disponible. */
+  .aiko-mobile-shell:has(.aiko-chat-input:focus) .aiko-mobile-stage,
+  .aiko-mobile-shell:has(.aiko-chat-input:focus) .aiko-mobile-nav {
+    display: none;
+  }
+
+  .aiko-mobile-shell:has(.aiko-chat-input:focus) {
+    gap: 0;
+  }
+
+  .aiko-chat-input {
+    font-size: 16px;
+  }
+
+  body {
+    background-attachment: scroll;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
 

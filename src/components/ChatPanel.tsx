@@ -808,9 +808,9 @@ export function ChatPanel({
   }, [active?.messages]);
 
   return (
-    <div className="relative flex h-full w-full min-w-0 max-w-full overflow-hidden rounded-2xl border border-white/10 bg-[#0f1117]/95 shadow-2xl">
+    <div className="relative flex h-full w-full min-w-0 max-w-full overflow-hidden rounded-xl border border-white/10 bg-[#0f1117]/95 shadow-2xl sm:rounded-2xl">
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center gap-2 border-b border-white/10 px-3 sm:px-4">
+        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-white/10 px-2.5 sm:h-14 sm:px-4">
           <button
             onClick={createNew}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/5 text-muted-foreground transition hover:bg-white/10 hover:text-foreground"
@@ -888,7 +888,7 @@ export function ChatPanel({
         <div
           ref={scrollRef}
           onScroll={handleChatScroll}
-          className="min-w-0 flex-1 space-y-5 overflow-x-hidden overflow-y-auto px-2.5 py-5 sm:px-6 lg:px-8"
+          className="min-w-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto px-2 py-3 overscroll-contain sm:space-y-5 sm:px-6 sm:py-5 lg:px-8"
         >
           {timeline.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center px-4 text-center">
@@ -948,7 +948,7 @@ export function ChatPanel({
           <button
             type="button"
             onClick={scrollToBottom}
-            className="absolute bottom-28 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-white/10 bg-[#20232e]/95 px-3 py-2 text-[11px] font-medium text-foreground shadow-xl shadow-black/30 backdrop-blur transition hover:border-primary/35 hover:bg-[#292d3a]"
+            className="absolute bottom-24 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-white/10 bg-[#20232e]/95 px-3 py-2 text-[11px] font-medium text-foreground shadow-xl shadow-black/30 backdrop-blur transition hover:border-primary/35 hover:bg-[#292d3a] sm:bottom-28"
             title="Ir al mensaje más reciente"
           >
             <ChevronDown className="h-3.5 w-3.5 text-primary" />
@@ -956,7 +956,7 @@ export function ChatPanel({
           </button>
         )}
 
-        <div className="border-t border-white/10 bg-[#0f1117]/80 p-3 sm:p-4">
+        <div className="border-t border-white/10 bg-[#0f1117]/80 p-2 sm:p-4">
           {attachments.length > 0 && (
             <div className="mb-2 flex flex-wrap gap-2">
               {attachments.map((att, i) => (
@@ -987,11 +987,11 @@ export function ChatPanel({
             </div>
           )}
 
-          <div className="mx-auto flex max-w-3xl items-end gap-2 rounded-2xl border border-white/10 bg-white/[0.04] p-2 focus-within:border-primary/40 focus-within:ring-1 focus-within:ring-primary/20">
+          <div className="mx-auto flex max-w-3xl items-end gap-1.5 rounded-2xl border border-white/10 bg-white/[0.04] p-1.5 focus-within:border-primary/40 focus-within:ring-1 focus-within:ring-primary/20 sm:gap-2 sm:p-2">
             <button
               onClick={() => (stt.listening ? stt.stop() : stt.start())}
               className={cn(
-                "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition",
+                "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition sm:h-10 sm:w-10",
                 stt.listening
                   ? "bg-accent/25 text-accent ring-2 ring-accent/40 animate-pulse"
                   : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
@@ -1007,7 +1007,7 @@ export function ChatPanel({
 
             <label
               className={cn(
-                "flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-xl transition",
+                "flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-xl transition sm:h-10 sm:w-10",
                 uploading
                   ? "text-accent"
                   : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
@@ -1039,7 +1039,7 @@ export function ChatPanel({
                   ? "Escuchando… suelta cuando termines"
                   : "Mensaje a Aiko… o usa el micrófono"
               }
-              className="max-h-36 min-h-[40px] flex-1 resize-none bg-transparent px-1 py-2.5 text-sm outline-none placeholder:text-muted-foreground/60"
+              className="aiko-chat-input max-h-36 min-h-9 min-w-0 flex-1 resize-none bg-transparent px-0.5 py-2 text-base outline-none placeholder:text-muted-foreground/60 sm:min-h-[40px] sm:px-1 sm:py-2.5 sm:text-sm"
               rows={1}
             />
 
@@ -1047,7 +1047,7 @@ export function ChatPanel({
               onClick={typing ? stopGenerating : send}
               disabled={typing ? false : !input.trim() || uploading}
               className={cn(
-                "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition",
+                "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition sm:h-10 sm:w-10",
                 typing
                   ? "bg-red-500/15 text-red-300 ring-1 ring-red-400/25 hover:bg-red-500/25"
                   : input.trim() && !uploading
@@ -1063,7 +1063,7 @@ export function ChatPanel({
               )}
             </button>
           </div>
-          <p className="mt-2 text-center text-[10px] text-muted-foreground/70">
+          <p className="mt-2 hidden text-center text-[10px] text-muted-foreground/70 sm:block">
             Enter envía · Micrófono envía solo al terminar de hablar
           </p>
         </div>

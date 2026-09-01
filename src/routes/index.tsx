@@ -44,11 +44,7 @@ function AikoApp() {
   const [reaction, setReaction] = useState<"idle" | "hearts">("idle");
   const [subtitle, setSubtitle] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [showAvatarStage, setShowAvatarStage] = useState(() =>
-    typeof window === "undefined"
-      ? true
-      : window.matchMedia("(min-width: 1180px)").matches,
-  );
+  const [showAvatarStage, setShowAvatarStage] = useState(false);
   const [floatingReminder, setFloatingReminder] =
     useState<FloatingReminder | null>(null);
 
@@ -66,7 +62,11 @@ function AikoApp() {
   }, []);
 
   useEffect(() => {
-    const query = window.matchMedia("(min-width: 1180px)");
+    // En celular Aiko se muestra encima del chat. En tablet se prioriza el
+    // espacio de trabajo y en escritorio vuelve a la distribución de 3 paneles.
+    const query = window.matchMedia(
+      "(max-width: 639px), (min-width: 1180px)",
+    );
     const sync = (event: MediaQueryList | MediaQueryListEvent) =>
       setShowAvatarStage(event.matches);
     sync(query);
@@ -426,14 +426,14 @@ function AikoApp() {
   );
 
   return (
-    <div className="h-screen w-screen overflow-hidden p-1.5 sm:p-2 lg:p-3">
-      <div className="glass-panel flex h-full w-full flex-col overflow-hidden rounded-3xl">
+    <div className="aiko-app-shell h-[100dvh] min-h-[100svh] w-full overflow-hidden sm:p-2 lg:p-3">
+      <div className="glass-panel flex h-full w-full flex-col overflow-hidden rounded-none sm:rounded-3xl">
         <TitleBar
           alwaysOnTop={alwaysOnTop}
           onToggleAlwaysOnTop={() => setAlwaysOnTop((v) => !v)}
         />
 
-        <div className="flex min-h-0 min-w-0 flex-1 gap-2 p-2 lg:gap-3 lg:p-3">
+        <div className="aiko-mobile-shell flex min-h-0 min-w-0 flex-1 flex-col gap-1 p-1 sm:flex-row sm:gap-2 sm:p-2 lg:gap-3 lg:p-3">
           <AikoSidebar
             active={tab}
             onChange={setTab}
@@ -444,7 +444,11 @@ function AikoApp() {
           />
 
           {/* Stage — avatar */}
-          <section className="glass-panel relative hidden min-w-0 flex-1 basis-0 items-center justify-center overflow-hidden rounded-2xl min-[1180px]:flex">
+          <section
+            className={`aiko-mobile-stage glass-panel relative order-1 h-[clamp(11.5rem,30dvh,16rem)] min-h-0 min-w-0 flex-none items-center justify-center overflow-hidden rounded-2xl sm:hidden min-[1180px]:order-none min-[1180px]:flex min-[1180px]:h-auto min-[1180px]:flex-1 min-[1180px]:basis-0 ${
+              tab === "chat" ? "flex" : "hidden"
+            }`}
+          >
             {showAvatarStage && (
               <AikoAvatar
                 onClick={onAvatarClick}
@@ -453,18 +457,18 @@ function AikoApp() {
             )}
             {subtitle && (
               <div
-                className="pointer-events-none absolute left-1/2 top-10 -translate-x-1/2"
+                className="pointer-events-none absolute left-1/2 top-3 z-30 -translate-x-1/2 sm:top-10"
                 style={{
                   animation: "aiko-float-heart 3.4s ease-out forwards",
                 }}
               >
-                <div className="glass-panel neon-pink rounded-2xl rounded-bl-sm px-4 py-2 text-sm font-medium">
+                <div className="glass-panel neon-pink max-w-[82vw] rounded-2xl rounded-bl-sm px-3 py-1.5 text-center text-xs font-medium sm:max-w-none sm:px-4 sm:py-2 sm:text-left sm:text-sm">
                   {subtitle}
                 </div>
               </div>
             )}
 
-            <div className="pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 text-center">
+            <div className="pointer-events-none absolute bottom-1.5 left-1/2 -translate-x-1/2 text-center sm:bottom-4">
               <div className="glass-panel inline-flex items-center gap-2 rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
                 <span className="h-1.5 w-1.5 rounded-full bg-accent neon-teal" />
                 {provider} · {model}
@@ -473,7 +477,7 @@ function AikoApp() {
           </section>
 
           {/* Right pane */}
-          <section className="flex min-h-0 min-w-0 flex-1 flex-col transition-[width] duration-300 min-[1180px]:w-[clamp(26rem,30vw,36rem)] min-[1180px]:flex-none">
+          <section className="order-2 flex min-h-0 min-w-0 flex-1 flex-col transition-[width] duration-300 sm:order-none min-[1180px]:w-[clamp(26rem,30vw,36rem)] min-[1180px]:flex-none">
             {tab === "chat" && (
               <ChatPanel
                 onAikoSpeak={speak}
@@ -552,9 +556,9 @@ function TitleBar({
     <div className="flex h-9 items-center justify-between border-b border-white/5 px-4">
       <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.3em] text-muted-foreground">
         <span className="h-1.5 w-1.5 rounded-full bg-primary neon-pink" />
-        aiko · desktop companion
+        aiko · <span className="hidden sm:inline">desktop&nbsp;</span>companion
       </div>
-      <div className="flex items-center gap-1">
+      <div className="hidden items-center gap-1 sm:flex">
         <button
           onClick={onToggleAlwaysOnTop}
           title="Siempre visible"
