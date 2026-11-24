@@ -45,7 +45,7 @@ import {
 } from "@/lib/conversations";
 import { useSpeechRecognition } from "@/lib/useSpeechRecognition";
 import { cn } from "@/lib/utils";
-import { API_BASE_URL, API_KEY } from "@/config/api";
+import { API_BASE_URL, authenticatedFetch } from "@/config/api";
 import { parseReminderIntent } from "@/lib/parseReminder";
 import { store } from "@/lib/productivity";
 
@@ -54,6 +54,9 @@ interface ChatPanelProps {
   onCollapse?: () => void;
   registerActions?: (a: ChatActions) => void;
   language: string;
+  provider: string;
+  model: string;
+  onModelUsed?: (provider: string, model: string) => void;
 }
 
 export interface ChatActions {
@@ -77,6 +80,8 @@ interface BackendChatResponse {
   error?: string;
   metadata?: {
     intent?: string;
+    provider?: string;
+    model?: string;
     reminder?: {
       text: string;
       minutes?: number;
@@ -268,6 +273,9 @@ export function ChatPanel({
   onCollapse,
   registerActions,
   language,
+  provider,
+  model,
+  onModelUsed,
 }: ChatPanelProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -426,9 +434,8 @@ export function ChatPanel({
     async (file: File): Promise<AttachmentItem> => {
       const form = new FormData();
       form.append("file", file);
-      const res = await fetch(`${API_BASE_URL}/api/upload`, {
+      const res = await authenticatedFetch(`${API_BASE_URL}/api/upload`, {
         method: "POST",
-        headers: { "X-API-Key": API_KEY },
         body: form,
       });
       if (!res.ok) {
@@ -589,17 +596,18 @@ export function ChatPanel({
       requestControllerRef.current = controller;
 
       try {
-        const response = await fetch(`${API_BASE_URL}/api/chat/message`, {
+        const response = await authenticatedFetch(`${API_BASE_URL}/api/chat/message`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "X-API-Key": API_KEY,
           },
           body: JSON.stringify({
             message: text,
             conversation_id: active.id,
             user_id: "user-123",
             analysis_level: analysisLevel,
+            provider,
+            model,
             replace_message_id: replaceMessageId || undefined,
             attachments: currentAttachments.length
               ? currentAttachments.map((a) => ({
@@ -621,6 +629,9 @@ export function ChatPanel({
         const data: BackendChatResponse = await response.json();
         if (requestSerial !== requestSerialRef.current) return;
         if (!data.success) throw new Error(data.error || "Backend error");
+        if (data.metadata?.provider && data.metadata?.model) {
+          onModelUsed?.(data.metadata.provider, data.metadata.model);
+        }
 
         const backendReminder = data.metadata?.reminder;
         let replyText =
@@ -718,6 +729,9 @@ export function ChatPanel({
       typing,
       uploading,
       applyReminder,
+      provider,
+      model,
+      onModelUsed,
     ],
   );
 

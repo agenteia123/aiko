@@ -7,8 +7,9 @@ import {
   useMemo,
   useRef,
   useState,
+  type FormEvent,
 } from "react";
-import { MessageCircle, Minus, Square, X, Pin } from "lucide-react";
+import { MessageCircle, Minus, Square, X, Pin, LogOut } from "lucide-react";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { AikoSidebar, type TabId } from "@/components/AikoSidebar";
@@ -32,6 +33,11 @@ import {
 import { store, type Reminder } from "@/lib/productivity";
 import { gainXP, onLevelUp, titleFor } from "@/lib/affection";
 import { sfx } from "@/lib/sfx";
+import {
+  clearAccessToken,
+  getAccessToken,
+  loginToAiko,
+} from "@/config/api";
 
 // Three.js, VRM y ReactMarkdown son paquetes pesados. Se cargan en fragmentos
 // separados para que la interfaz aparezca primero en celulares lentos.
@@ -84,6 +90,107 @@ export const Route = createFileRoute("/")({
 });
 
 function AikoApp() {
+  const [authenticated, setAuthenticated] = useState(() => Boolean(getAccessToken()));
+
+  useEffect(() => {
+    const onAuthenticated = () => setAuthenticated(true);
+    const onExpired = () => setAuthenticated(false);
+    window.addEventListener("aiko-authenticated", onAuthenticated);
+    window.addEventListener("aiko-auth-expired", onExpired);
+    return () => {
+      window.removeEventListener("aiko-authenticated", onAuthenticated);
+      window.removeEventListener("aiko-auth-expired", onExpired);
+    };
+  }, []);
+
+  const logout = useCallback(() => {
+    clearAccessToken();
+    setAuthenticated(false);
+  }, []);
+
+  if (!authenticated) {
+    return <LoginScreen onAuthenticated={() => setAuthenticated(true)} />;
+  }
+  return <AikoWorkspace onLogout={logout} />;
+}
+
+function LoginScreen({ onAuthenticated }: { onAuthenticated: () => void }) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setLoading(true);
+    try {
+      await loginToAiko(username.trim(), password);
+      setPassword("");
+      onAuthenticated();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No se pudo iniciar sesión.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <main className="aiko-app-shell flex min-h-[100dvh] items-center justify-center p-4">
+      <form
+        onSubmit={submit}
+        className="glass-panel w-full max-w-sm rounded-3xl border border-white/10 p-6 shadow-2xl sm:p-8"
+      >
+        <div className="mb-6 text-center">
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/15 text-primary">
+            <MessageCircle className="h-6 w-6" />
+          </div>
+          <h1 className="text-xl font-semibold">Entrar a Aiko</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Usa las credenciales configuradas en el backend privado.
+          </p>
+        </div>
+
+        <label className="mb-4 block text-sm">
+          Usuario
+          <input
+            autoComplete="username"
+            value={username}
+            onChange={(event) => setUsername(event.target.value)}
+            className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 outline-none focus:border-primary/50"
+            required
+          />
+        </label>
+        <label className="mb-4 block text-sm">
+          Contraseña
+          <input
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 outline-none focus:border-primary/50"
+            required
+          />
+        </label>
+
+        {error && (
+          <p role="alert" className="mb-4 rounded-xl bg-destructive/10 p-3 text-sm text-destructive">
+            {error}
+          </p>
+        )}
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full rounded-xl bg-primary px-4 py-2.5 font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-60"
+        >
+          {loading ? "Conectando…" : "Iniciar sesión"}
+        </button>
+      </form>
+    </main>
+  );
+}
+
+function AikoWorkspace({ onLogout }: { onLogout: () => void }) {
   const [tab, setTab] = useState<TabId>("chat");
   const [alwaysOnTop, setAlwaysOnTop] = useState(false);
   const [reaction, setReaction] = useState<"idle" | "hearts">("idle");
@@ -135,7 +242,7 @@ function AikoApp() {
   const [pitch, setPitch] = useState(1.15);
   const [volume, setVolume] = useState(1);
   const [provider, setProvider] = useState("ollama");
-  const [model, setModel] = useState("llama3.1");
+  const [model, setModel] = useState("qwen2.5:7b");
   const [modelFolder, setModelFolder] = useState("");
   const [language, setLanguage] = useState("es");
 
@@ -163,8 +270,20 @@ function AikoApp() {
         if (typeof s.rate === "number") setRate(s.rate);
         if (typeof s.pitch === "number") setPitch(s.pitch);
         if (typeof s.volume === "number") setVolume(s.volume);
-        if (s.provider) setProvider(s.provider);
-        if (s.model) setModel(s.model);
+        const modelOptions: Record<string, string[]> = {
+          ollama: ["qwen2.5:7b", "llama3.1", "qwen2.5", "mistral"],
+          groq: ["openai/gpt-oss-20b"],
+          google: ["gemini-2.0-flash"],
+        };
+        const savedProvider = ["ollama", "groq", "google"].includes(s.provider)
+          ? s.provider
+          : "ollama";
+        setProvider(savedProvider);
+        setModel(
+          modelOptions[savedProvider].includes(s.model)
+            ? s.model
+            : modelOptions[savedProvider][0],
+        );
         if (s.modelFolder) setModelFolder(s.modelFolder);
         if (s.language) setLanguage(s.language);
       }
@@ -486,6 +605,7 @@ function AikoApp() {
         <TitleBar
           alwaysOnTop={alwaysOnTop}
           onToggleAlwaysOnTop={() => setAlwaysOnTop((v) => !v)}
+          onLogout={onLogout}
         />
 
         <div
@@ -562,6 +682,12 @@ function AikoApp() {
                   onAikoSpeak={speak}
                   onCollapse={() => setChatCollapsed(true)}
                   language={language}
+                  provider={provider}
+                  model={model}
+                  onModelUsed={(nextProvider, nextModel) => {
+                    setProvider(nextProvider);
+                    setModel(nextModel);
+                  }}
                   registerActions={(a) => {
                     actionsRef.current = a;
                   }}
@@ -697,9 +823,11 @@ function PanelLoadingState({ label }: { label: string }) {
 function TitleBar({
   alwaysOnTop,
   onToggleAlwaysOnTop,
+  onLogout,
 }: {
   alwaysOnTop: boolean;
   onToggleAlwaysOnTop: () => void;
+  onLogout: () => void;
 }) {
   return (
     <div className="flex h-9 items-center justify-between border-b border-white/5 px-4">
@@ -734,6 +862,13 @@ function TitleBar({
           className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition hover:bg-destructive/60 hover:text-white"
         >
           <X className="h-3.5 w-3.5" />
+        </button>
+        <button
+          onClick={onLogout}
+          title="Cerrar sesión"
+          className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition hover:bg-white/10 hover:text-foreground"
+        >
+          <LogOut className="h-3.5 w-3.5" />
         </button>
       </div>
     </div>

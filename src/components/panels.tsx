@@ -260,37 +260,23 @@ const PROVIDERS = [
   {
     id: "ollama",
     label: "Ollama",
-    desc: "Local · sin internet",
+    desc: "Local · en tu computadora",
     icon: HardDrive,
-    models: ["llama3.1", "qwen2.5", "mistral"],
+    models: ["qwen2.5:7b", "llama3.1", "qwen2.5", "mistral"],
   },
   {
-    id: "openai",
-    label: "OpenAI",
-    desc: "GPT en la nube",
+    id: "groq",
+    label: "Groq",
+    desc: "API externa configurada en backend",
     icon: Cloud,
-    models: ["gpt-4o", "gpt-4o-mini"],
-  },
-  {
-    id: "anthropic",
-    label: "Claude",
-    desc: "Anthropic",
-    icon: Cloud,
-    models: ["claude-sonnet-4", "claude-haiku-4"],
+    models: ["openai/gpt-oss-20b"],
   },
   {
     id: "google",
     label: "Gemini",
-    desc: "Google AI",
+    desc: "API externa configurada en backend",
     icon: Cloud,
-    models: ["gemini-2.0-flash", "gemini-1.5-pro"],
-  },
-  {
-    id: "xai",
-    label: "Grok",
-    desc: "xAI",
-    icon: Cloud,
-    models: ["grok-2"],
+    models: ["gemini-2.0-flash"],
   },
 ];
 
@@ -310,7 +296,7 @@ export function ModelsPanel({
   return (
     <PanelShell
       title="Modelos AI"
-      subtitle="Preferencia de proveedor (la lógica real está en el backend)"
+      subtitle="Este proveedor y modelo se envían en cada mensaje"
     >
       <div>
         <SectionLabel>Proveedor</SectionLabel>
@@ -349,9 +335,9 @@ export function ModelsPanel({
         <div className="flex items-start gap-2">
           <Cpu className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
           <span>
-            En producción Aiko usa el cascade del backend (Groq → Gemini → …).
-            Este selector guarda tu preferencia para cuando conectes control
-            manual.
+            Ollama es la opción local. Las APIs externas se usan solo cuando
+            las eliges y el backend tiene su clave configurada; Aiko no cambia
+            automáticamente a otro proveedor.
           </span>
         </div>
       </Hint>
